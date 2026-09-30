@@ -10,6 +10,14 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   CORS_ORIGIN: z.string().default("*"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+
+  // Envio de emails pelo Brevo. Sem a chave, o link de confirmação só aparece no terminal.
+  BREVO_API_KEY: z.string().optional(),
+  MAIL_FROM_EMAIL: z.string().optional(),
+  MAIL_FROM_NAME: z.string().default("Clutch"),
+  // Endereço do site usado nos links dos emails (ex.: http://13.219.234.57).
+  // Se ficar vazio, usa o endereço de onde veio o cadastro.
+  APP_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -19,6 +27,11 @@ if (!parsed.success) {
   for (const issue of parsed.error.issues) {
     console.error(`   - ${issue.path.join(".")}: ${issue.message}`);
   }
+  process.exit(1);
+}
+
+if (parsed.data.BREVO_API_KEY && !parsed.data.MAIL_FROM_EMAIL) {
+  console.error("❌ MAIL_FROM_EMAIL é obrigatório quando BREVO_API_KEY está preenchida");
   process.exit(1);
 }
 

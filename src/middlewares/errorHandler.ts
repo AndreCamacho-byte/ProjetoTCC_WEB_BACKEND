@@ -10,7 +10,7 @@ export const notFoundHandler: RequestHandler = (req, res) => {
 // O Express 5 já encaminha para cá os erros lançados em rotas async.
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message });
+    res.status(err.statusCode).json(err.code ? { error: err.message, code: err.code } : { error: err.message });
     return;
   }
 

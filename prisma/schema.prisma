@@ -27,30 +27,47 @@ enum SkateLevel {
 }
 
 model User {
-  id           String      @id @default(uuid())
-  name         String
-  username     String      @unique
-  email        String      @unique
-  passwordHash String
-  avatarUrl    String?
-  bio          String?
-  skateLevel   SkateLevel?
-  role         UserRole    @default(USER)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id              String      @id @default(uuid())
+  name            String
+  username        String      @unique
+  email           String      @unique
+  passwordHash    String
+  avatarUrl       String?
+  bio             String?
+  skateLevel      SkateLevel?
+  role            UserRole    @default(USER)
+  // Preenchido quando a pessoa clica no link do email. Enquanto for nulo, o login fica bloqueado.
+  emailVerifiedAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  posts        Post[]
-  comments     Comment[]
-  likes        Like[]
-  followers    Follow[]            @relation("following")
-  following    Follow[]            @relation("follower")
-  spots        Spot[]
-  meetups      Meetup[]
-  participations MeetupParticipant[]
-  cartItems    CartItem[]
-  orders       Order[]
+  verificationTokens EmailVerificationToken[]
+  posts              Post[]
+  comments           Comment[]
+  likes              Like[]
+  followers          Follow[]                 @relation("following")
+  following          Follow[]                 @relation("follower")
+  spots              Spot[]
+  meetups            Meetup[]
+  participations     MeetupParticipant[]
+  cartItems          CartItem[]
+  orders             Order[]
 
   @@map("users")
+}
+
+// Link de confirmação de email enviado no cadastro.
+// Só o hash (SHA-256) do token fica salvo: quem tiver acesso ao banco não consegue usar os links.
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("email_verification_tokens")
 }
 
 // ==========================================
@@ -121,12 +138,12 @@ enum OrderStatus {
 }
 
 model Brand {
-  id          String    @id @default(uuid())
-  name        String    @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   description String?
   logoUrl     String?
   website     String?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
   products Product[]
 

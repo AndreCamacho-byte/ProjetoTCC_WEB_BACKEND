@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
-import { toPublicUser } from "./auth.service";
+import { signToken, toPublicUser } from "./auth.service";
 
 type ProfileInput = { name?: string; username?: string };
 
@@ -17,6 +17,27 @@ export async function updateProfile(userId: string, data: ProfileInput) {
   }
 
   return toPublicUser(await prisma.user.update({ where: { id: userId }, data }));
+}
+
+// Troca de senha por quem está logado: pede a senha atual, para ninguém trocar a senha
+// de outra pessoa só por encontrar o aparelho dela logado.
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    throw new AppError("Senha atual incorreta", 401, "WRONG_PASSWORD");
+  }
+  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    throw new AppError("A nova senha precisa ser diferente da atual", 400);
+  }
+
+  // Aumentar o tokenVersion encerra os logins abertos em outros aparelhos
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await bcrypt.hash(newPassword, 10), tokenVersion: { increment: 1 } },
+  });
+
+  // Devolve um token novo para este aparelho continuar logado
+  return { user: toPublicUser(updated), token: signToken(updated) };
 }
 
 // A data de nascimento só pode ser informada uma vez (depois, só um administrador altera).

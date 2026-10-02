@@ -12,15 +12,17 @@ import { prisma } from "../lib/prisma";
 type RegisterInput = { name: string; email: string; password: string; birthDate: Date };
 type LoginInput = { email: string; password: string };
 
-// Nunca devolve o hash da senha para o cliente
-export type PublicUser = Omit<User, "passwordHash">;
+// Nunca devolve o hash da senha (nem o controle interno de sessões) para o cliente
+export type PublicUser = Omit<User, "passwordHash" | "tokenVersion">;
 
-export function toPublicUser({ passwordHash: _, ...user }: User): PublicUser {
+export function toPublicUser({ passwordHash: _, tokenVersion: __, ...user }: User): PublicUser {
   return user;
 }
 
-export function signToken(userId: string) {
-  return jwt.sign({ sub: userId }, env.JWT_SECRET, {
+// O token leva o número de versão da conta (v). Quando a senha muda, o número da conta
+// aumenta e os tokens antigos deixam de ser aceitos (veja requireAuth).
+export function signToken(user: Pick<User, "id" | "tokenVersion">) {
+  return jwt.sign({ sub: user.id, v: user.tokenVersion }, env.JWT_SECRET, {
     expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"],
   });
 }
@@ -95,21 +97,33 @@ async function sendVerificationEmail(user: User, appUrl: string) {
   }
 }
 
+// Contas que nunca confirmaram o email são apagadas depois deste prazo
+const UNVERIFIED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function register({ name, email, password, birthDate }: RegisterInput, appUrl: string) {
+  // Faxina: remove cadastros antigos que nunca foram confirmados
+  await prisma.user.deleteMany({
+    where: { emailVerifiedAt: null, createdAt: { lt: new Date(Date.now() - UNVERIFIED_TTL_MS) } },
+  });
+
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
+  if (existing?.emailVerifiedAt) {
     throw new AppError("Este email já está cadastrado", 409);
   }
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      birthDate,
-      username: await generateUsername(email),
-      passwordHash: await bcrypt.hash(password, 10),
-    },
-  });
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // Se já existe um cadastro com esse email que nunca foi confirmado, ele é substituído pelos
+  // dados novos. Assim ninguém "prende" o email de outra pessoa só por ter se cadastrado com ele:
+  // quem recebe o código (o dono do email) é quem fica com a conta.
+  const user = existing
+    ? await prisma.user.update({
+        where: { id: existing.id },
+        data: { name, birthDate, passwordHash, tokenVersion: { increment: 1 } },
+      })
+    : await prisma.user.create({
+        data: { name, email, birthDate, passwordHash, username: await generateUsername(email) },
+      });
 
   await sendVerificationEmail(user, appUrl);
 
@@ -138,7 +152,7 @@ async function confirmUser(userId: string) {
     prisma.emailVerificationToken.deleteMany({ where: { userId } }),
   ]);
 
-  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user.id) };
+  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };
 }
 
 // Confirmação digitando o código de 6 dígitos recebido por email
@@ -219,6 +233,8 @@ export async function resetPassword(token: string, password: string) {
       where: { id: user.id },
       data: {
         passwordHash: await bcrypt.hash(password, 10),
+        // Encerra os logins que estavam abertos com a senha antiga
+        tokenVersion: { increment: 1 },
         // Quem abriu o link provou que é dono do email, então a conta também fica confirmada
         emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
       },
@@ -244,7 +260,7 @@ export async function login({ email, password }: LoginInput) {
     throw new AppError("Confirme seu email antes de entrar.", 403, "EMAIL_NOT_VERIFIED");
   }
 
-  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user.id) };
+  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };
 }
 
 export async function getUserById(id: string) {

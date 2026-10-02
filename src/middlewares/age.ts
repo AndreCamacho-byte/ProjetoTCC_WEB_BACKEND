@@ -1,14 +1,13 @@
 import type { RequestHandler } from "express";
 import { AppError } from "../errors/AppError";
-import { prisma } from "../lib/prisma";
 import { MIN_AGE, ageStatus } from "../utils/age";
 
 // Protege as rotas de spots/encontros e do marketplace. Use sempre depois do requireAuth:
 //   router.post("/spots", requireAuth, requireMinAge, controller.create)
 // Bloqueia quem tem menos de 12 anos e quem ainda não informou a data de nascimento.
-export const requireMinAge: RequestHandler = async (req, _res, next) => {
-  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { birthDate: true } });
-  const status = ageStatus(user?.birthDate ?? null);
+// A data de nascimento vem do banco, carregada pelo requireAuth nesta mesma requisição.
+export const requireMinAge: RequestHandler = (req, _res, next) => {
+  const status = ageStatus(req.authUser?.birthDate ?? null);
 
   if (status === "UNVERIFIED") {
     throw new AppError("Informe sua data de nascimento para liberar esta área.", 403, "AGE_NOT_VERIFIED");

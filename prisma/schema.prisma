@@ -41,6 +41,9 @@ model User {
   // Data de nascimento (só a data, sem hora). Nula nas contas criadas antes de o cadastro pedir:
   // nesse caso a idade conta como "não verificada" e spots e marketplace ficam bloqueados.
   birthDate       DateTime?   @db.Date
+  // Aumenta toda vez que a senha muda. Cada login guarda o número da época em que foi feito;
+  // se o número da conta já é outro, aquele login deixa de valer (derruba as sessões antigas).
+  tokenVersion    Int         @default(0)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 

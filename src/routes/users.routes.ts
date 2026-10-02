@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as accountController from "../controllers/account.controller";
 import { requireAuth } from "../middlewares/auth";
+import { limits } from "../middlewares/rateLimit";
 
 export const usersRoutes = Router();
 
@@ -73,6 +74,51 @@ export const usersRoutes = Router();
  */
 usersRoutes.patch("/users/me", requireAuth, accountController.updateProfile);
 usersRoutes.delete("/users/me", requireAuth, accountController.deleteAccount);
+
+/**
+ * @openapi
+ * /users/me/password:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Troca a senha de quem está logado
+ *     description: |
+ *       Pede a senha atual. Ao trocar, os logins abertos em outros aparelhos são encerrados;
+ *       a resposta traz um token novo para o aparelho atual continuar conectado.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword: { type: string, format: password }
+ *               newPassword: { type: string, format: password, minLength: 8 }
+ *     responses:
+ *       200:
+ *         description: Senha alterada
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       400:
+ *         description: Nova senha inválida ou igual à atual
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Senha atual incorreta
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       429:
+ *         description: Muitas tentativas
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+usersRoutes.patch("/users/me/password", requireAuth, limits.login, accountController.changePassword);
 
 /**
  * @openapi

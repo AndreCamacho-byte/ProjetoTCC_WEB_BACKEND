@@ -1,12 +1,7 @@
 import type { Request, Response } from "express";
 import { describe, expect, it, vi } from "vitest";
-
-vi.mock("../lib/prisma", () => import("../test/prismaMock"));
-
-import { prisma } from "../test/prismaMock";
 import { requireMinAge } from "./age";
 
-const req = { userId: "user-1" } as Request;
 const res = {} as Response;
 
 const yearsAgo = (years: number) => {
@@ -14,41 +9,37 @@ const yearsAgo = (years: number) => {
   return new Date(Date.UTC(d.getUTCFullYear() - years, d.getUTCMonth(), d.getUTCDate()));
 };
 
+// O requireAuth roda antes e deixa os dados da conta em req.authUser
+const requestBornOn = (birthDate: Date | null) => ({ authUser: { role: "USER", birthDate } }) as Request;
+
 describe("requireMinAge", () => {
-  it("libera quem tem 12 anos ou mais", async () => {
-    prisma.user.findUnique.mockResolvedValue({ birthDate: yearsAgo(12) });
+  it("libera quem tem 12 anos ou mais", () => {
     const next = vi.fn();
-
-    await requireMinAge(req, res, next);
-
+    requireMinAge(requestBornOn(yearsAgo(12)), res, next);
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("bloqueia menores de 12 anos", async () => {
-    prisma.user.findUnique.mockResolvedValue({ birthDate: yearsAgo(11) });
-    await expect(requireMinAge(req, res, vi.fn())).rejects.toMatchObject({
-      statusCode: 403,
-      code: "AGE_RESTRICTED",
-    });
+  it("bloqueia menores de 12 anos", () => {
+    expect(() => requireMinAge(requestBornOn(yearsAgo(11)), res, vi.fn())).toThrowError(
+      expect.objectContaining({ statusCode: 403, code: "AGE_RESTRICTED" }),
+    );
   });
 
-  it("bloqueia contas sem data de nascimento (idade não verificada)", async () => {
-    prisma.user.findUnique.mockResolvedValue({ birthDate: null });
-    await expect(requireMinAge(req, res, vi.fn())).rejects.toMatchObject({
-      statusCode: 403,
-      code: "AGE_NOT_VERIFIED",
-    });
+  it("bloqueia contas sem data de nascimento (idade não verificada)", () => {
+    expect(() => requireMinAge(requestBornOn(null), res, vi.fn())).toThrowError(
+      expect.objectContaining({ statusCode: 403, code: "AGE_NOT_VERIFIED" }),
+    );
   });
 
-  it("bloqueia quando a conta não existe mais", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    await expect(requireMinAge(req, res, vi.fn())).rejects.toMatchObject({ code: "AGE_NOT_VERIFIED" });
+  it("bloqueia quando o login não foi conferido antes", () => {
+    expect(() => requireMinAge({} as Request, res, vi.fn())).toThrowError(
+      expect.objectContaining({ code: "AGE_NOT_VERIFIED" }),
+    );
   });
 
-  it("não chama a rota quando bloqueia", async () => {
-    prisma.user.findUnique.mockResolvedValue({ birthDate: yearsAgo(5) });
+  it("não chama a rota quando bloqueia", () => {
     const next = vi.fn();
-    await expect(requireMinAge(req, res, next)).rejects.toThrow();
+    expect(() => requireMinAge(requestBornOn(yearsAgo(5)), res, next)).toThrow();
     expect(next).not.toHaveBeenCalled();
   });
 });

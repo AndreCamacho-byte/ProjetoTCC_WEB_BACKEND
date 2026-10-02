@@ -19,6 +19,17 @@ export async function updateProfile(userId: string, data: ProfileInput) {
   return toPublicUser(await prisma.user.update({ where: { id: userId }, data }));
 }
 
+// A data de nascimento só pode ser informada uma vez (depois, só um administrador altera).
+// Se desse para trocar à vontade, a regra de idade mínima não valeria nada.
+export async function setBirthDate(userId: string, birthDate: Date) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (user.birthDate) {
+    throw new AppError("A data de nascimento já foi informada e não pode ser alterada", 409);
+  }
+
+  return toPublicUser(await prisma.user.update({ where: { id: userId }, data: { birthDate } }));
+}
+
 export async function setAvatar(userId: string, image: Buffer) {
   // O "?v=" muda a cada troca de foto, então o navegador pode guardar a imagem em cache sem mostrar a antiga
   const avatarUrl = `/api/users/${userId}/avatar?v=${Date.now()}`;

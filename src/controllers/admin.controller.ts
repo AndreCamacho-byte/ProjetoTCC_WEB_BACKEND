@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as adminService from "../services/admin.service";
+import { birthDateSchema } from "../utils/age";
 
 const listSchema = z.object({
   search: z.string().trim().max(100).optional(),
@@ -20,6 +21,8 @@ const updateSchema = z
       .regex(/^[a-z0-9_]{3,20}$/, "Use de 3 a 20 letras minúsculas, números ou _"),
     role: z.enum(["USER", "ADMIN"]),
     emailVerified: z.boolean(),
+    // null apaga a data (a idade volta a ficar "não verificada")
+    birthDate: birthDateSchema.nullable(),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, "Informe pelo menos um campo para alterar");

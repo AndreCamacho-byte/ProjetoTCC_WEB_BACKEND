@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { AppError } from "../errors/AppError";
 import * as accountService from "../services/account.service";
+import { birthDateSchema } from "../utils/age";
 
 const MAX_AVATAR_BYTES = 300 * 1024; // o site já manda a foto reduzida (256x256), então isso sobra
 
@@ -21,6 +22,8 @@ const avatarSchema = z.object({
   image: z.string().regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/, "Envie a foto em JPEG"),
 });
 
+const birthDateBodySchema = z.object({ birthDate: birthDateSchema });
+
 const deleteSchema = z.object({
   password: z.string().min(1, "Informe a senha"),
 });
@@ -29,6 +32,11 @@ const idSchema = z.object({ id: z.uuid("Id inválido") });
 
 export async function updateProfile(req: Request, res: Response) {
   res.json(await accountService.updateProfile(req.userId!, profileSchema.parse(req.body)));
+}
+
+export async function setBirthDate(req: Request, res: Response) {
+  const { birthDate } = birthDateBodySchema.parse(req.body);
+  res.json(await accountService.setBirthDate(req.userId!, birthDate));
 }
 
 export async function setAvatar(req: Request, res: Response) {

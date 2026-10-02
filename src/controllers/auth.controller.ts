@@ -2,13 +2,17 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { env } from "../config/env";
 import * as authService from "../services/auth.service";
+import { birthDateSchema } from "../utils/age";
 
 const emailField = z.email("Email inválido").trim().toLowerCase();
+
+const passwordField = z.string().min(8, "Senha precisa ter pelo menos 8 caracteres").max(72);
 
 const registerSchema = z.object({
   name: z.string().trim().min(2, "Nome precisa ter pelo menos 2 caracteres").max(60),
   email: emailField,
-  password: z.string().min(8, "Senha precisa ter pelo menos 8 caracteres").max(72),
+  password: passwordField,
+  birthDate: birthDateSchema,
 });
 
 const loginSchema = z.object({
@@ -27,6 +31,11 @@ const verifyCodeSchema = z.object({
 
 const resendSchema = z.object({
   email: emailField,
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token não informado"),
+  password: passwordField,
 });
 
 // Endereço do site para montar o link do email. Na AWS o IP do frontend muda a cada deploy,
@@ -60,6 +69,16 @@ export async function verifyEmailCode(req: Request, res: Response) {
 export async function resendVerification(req: Request, res: Response) {
   const { email } = resendSchema.parse(req.body);
   res.json(await authService.resendVerification(email, getAppUrl(req)));
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  const { email } = resendSchema.parse(req.body);
+  res.json(await authService.forgotPassword(email, getAppUrl(req)));
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  const { token, password } = resetPasswordSchema.parse(req.body);
+  res.json(await authService.resetPassword(token, password));
 }
 
 export async function me(req: Request, res: Response) {

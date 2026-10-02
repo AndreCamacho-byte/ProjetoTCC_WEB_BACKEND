@@ -38,23 +38,41 @@ model User {
   role            UserRole    @default(USER)
   // Preenchido quando a pessoa clica no link do email. Enquanto for nulo, o login fica bloqueado.
   emailVerifiedAt DateTime?
+  // Data de nascimento (só a data, sem hora). Nula nas contas criadas antes de o cadastro pedir:
+  // nesse caso a idade conta como "não verificada" e spots e marketplace ficam bloqueados.
+  birthDate       DateTime?   @db.Date
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  verificationTokens EmailVerificationToken[]
-  avatar             UserAvatar?
-  posts              Post[]
-  comments           Comment[]
-  likes              Like[]
-  followers          Follow[]                 @relation("following")
-  following          Follow[]                 @relation("follower")
-  spots              Spot[]
-  meetups            Meetup[]
-  participations     MeetupParticipant[]
-  cartItems          CartItem[]
-  orders             Order[]
+  verificationTokens  EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  avatar              UserAvatar?
+  posts               Post[]
+  comments            Comment[]
+  likes               Like[]
+  followers           Follow[]                 @relation("following")
+  following           Follow[]                 @relation("follower")
+  spots               Spot[]
+  meetups             Meetup[]
+  participations      MeetupParticipant[]
+  cartItems           CartItem[]
+  orders              Order[]
 
   @@map("users")
+}
+
+// Link de "esqueci minha senha" enviado por email. Assim como na confirmação de email,
+// só o hash do token fica salvo. Vale por 1 hora e só pode ser usado uma vez.
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // Foto de perfil, guardada no banco (JPEG pequeno, já recortado pelo site).

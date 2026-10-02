@@ -79,6 +79,7 @@ adminRoutes.get("/admin/users", adminController.listUsers);
  *               username: { type: string, example: tonyhawk }
  *               role: { type: string, enum: [USER, ADMIN] }
  *               emailVerified: { type: boolean, description: Marca ou desmarca o email como confirmado }
+ *               birthDate: { type: string, format: date, nullable: true, example: '2005-05-12', description: Corrige a data de nascimento (null apaga) }
  *     responses:
  *       200:
  *         description: Usuário atualizado

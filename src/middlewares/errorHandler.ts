@@ -22,7 +22,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  if (err instanceof Prisma.PrismaClientInitializationError) {
+  // Banco fora de alcance, conexão caiu no meio ou a fila de conexões estourou (P2024):
+  // são falhas passageiras, então a resposta é 503 e não "erro interno"
+  const databaseUnavailable =
+    err instanceof Prisma.PrismaClientInitializationError ||
+    (err instanceof Prisma.PrismaClientKnownRequestError &&
+      ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(err.code));
+
+  if (databaseUnavailable) {
     console.error("Banco de dados indisponível:", err.message);
     res.status(503).json({ error: "Banco de dados indisponível. Tente novamente em instantes." });
     return;

@@ -20,6 +20,11 @@ export const authRoutes = Router();
  *         skateLevel: { type: string, nullable: true, enum: [INICIANTE, INTERMEDIARIO, AVANCADO, PROFISSIONAL] }
  *         role: { type: string, enum: [USER, ADMIN] }
  *         emailVerifiedAt: { type: string, format: date-time, nullable: true, description: Data da confirmação do email }
+ *         birthDate:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: Data de nascimento. Nula nas contas antigas (idade não verificada). Menores de 12 anos e contas sem data não acessam spots nem o marketplace.
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
  *     AuthResponse:
@@ -60,11 +65,12 @@ export const authRoutes = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, email, password]
+ *             required: [name, email, password, birthDate]
  *             properties:
  *               name: { type: string, example: Tony Hawk }
  *               email: { type: string, format: email, example: tony@clutch.com }
  *               password: { type: string, format: password, minLength: 8, example: skate1234 }
+ *               birthDate: { type: string, format: date, example: '2005-05-12', description: Formato AAAA-MM-DD }
  *     responses:
  *       201:
  *         description: Conta criada e email de confirmação enviado
@@ -238,6 +244,68 @@ authRoutes.post("/auth/verify-code", authController.verifyEmailCode);
  *             schema: { $ref: '#/components/schemas/Message' }
  */
 authRoutes.post("/auth/resend-verification", authController.resendVerification);
+
+/**
+ * @openapi
+ * /auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Envia por email um link para criar uma nova senha
+ *     description: |
+ *       Responde sempre a mesma mensagem, exista ou não a conta. O link vale por 1 hora,
+ *       só funciona uma vez, e é enviado no máximo um por minuto.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email, example: tony@clutch.com }
+ *     responses:
+ *       200:
+ *         description: Pedido recebido
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Message' }
+ */
+authRoutes.post("/auth/forgot-password", authController.forgotPassword);
+
+/**
+ * @openapi
+ * /auth/reset-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Define uma nova senha usando o token do link recebido por email
+ *     description: Como abrir o link prova que a pessoa é dona do email, a conta também fica confirmada.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, password]
+ *             properties:
+ *               token: { type: string }
+ *               password: { type: string, format: password, minLength: 8 }
+ *     responses:
+ *       200:
+ *         description: Senha alterada
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Message' }
+ *       400:
+ *         description: Link inválido, já usado ou expirado, ou senha fora das regras
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error: { type: string }
+ *                 code: { type: string, example: INVALID_TOKEN }
+ */
+authRoutes.post("/auth/reset-password", authController.resetPassword);
 
 /**
  * @openapi

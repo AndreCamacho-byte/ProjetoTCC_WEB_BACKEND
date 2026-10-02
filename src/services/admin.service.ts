@@ -10,6 +10,7 @@ type UpdateUserInput = {
   username?: string;
   role?: UserRole;
   emailVerified?: boolean;
+  birthDate?: Date | null;
 };
 
 export async function listUsers({ search, page, pageSize }: ListUsersInput) {

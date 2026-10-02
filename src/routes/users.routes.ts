@@ -76,6 +76,45 @@ usersRoutes.delete("/users/me", requireAuth, accountController.deleteAccount);
 
 /**
  * @openapi
+ * /users/me/birth-date:
+ *   put:
+ *     tags: [Users]
+ *     summary: Informa a data de nascimento (contas criadas antes de o cadastro pedir)
+ *     description: |
+ *       Só pode ser informada uma vez; depois disso, apenas um administrador altera.
+ *       É o que libera os spots e o marketplace para quem tem 12 anos ou mais.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [birthDate]
+ *             properties:
+ *               birthDate: { type: string, format: date, example: '2005-05-12' }
+ *     responses:
+ *       200:
+ *         description: Data salva
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/User' }
+ *       400:
+ *         description: Data inválida
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ValidationError' }
+ *       409:
+ *         description: A data já tinha sido informada
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+usersRoutes.put("/users/me/birth-date", requireAuth, accountController.setBirthDate);
+
+/**
+ * @openapi
  * /users/me/avatar:
  *   put:
  *     tags: [Users]

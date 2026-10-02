@@ -3,12 +3,13 @@ import bcrypt from "bcryptjs";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import type { User } from "@prisma/client";
 import { env } from "../config/env";
+import { resetPasswordTemplate } from "../emails/resetPassword";
 import { verifyEmailTemplate } from "../emails/verifyEmail";
 import { AppError } from "../errors/AppError";
 import { sendMail } from "../lib/mail";
 import { prisma } from "../lib/prisma";
 
-type RegisterInput = { name: string; email: string; password: string };
+type RegisterInput = { name: string; email: string; password: string; birthDate: Date };
 type LoginInput = { email: string; password: string };
 
 // Nunca devolve o hash da senha para o cliente
@@ -94,7 +95,7 @@ async function sendVerificationEmail(user: User, appUrl: string) {
   }
 }
 
-export async function register({ name, email, password }: RegisterInput, appUrl: string) {
+export async function register({ name, email, password, birthDate }: RegisterInput, appUrl: string) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     throw new AppError("Este email já está cadastrado", 409);
@@ -104,6 +105,7 @@ export async function register({ name, email, password }: RegisterInput, appUrl:
     data: {
       name,
       email,
+      birthDate,
       username: await generateUsername(email),
       passwordHash: await bcrypt.hash(password, 10),
     },
@@ -171,6 +173,61 @@ export async function resendVerification(email: string, appUrl: string) {
 
   // Sempre a mesma resposta, para não revelar quais emails têm conta
   return { message: "Se existir uma conta aguardando confirmação com esse email, enviamos um novo código." };
+}
+
+// ---------- Esqueci minha senha ----------
+
+const RESET_TTL_MS = 60 * 60 * 1000; // o link vale 1 hora
+
+export async function forgotPassword(email: string, appUrl: string) {
+  const user = await prisma.user.findUnique({ where: { email }, include: { passwordResetTokens: true } });
+
+  const lastSent = user?.passwordResetTokens.reduce((latest, t) => Math.max(latest, t.createdAt.getTime()), 0) ?? 0;
+  if (user && Date.now() - lastSent > RESEND_COOLDOWN_MS) {
+    const token = crypto.randomBytes(32).toString("base64url");
+
+    await prisma.$transaction([
+      prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
+      prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TTL_MS) },
+      }),
+    ]);
+
+    const link = `${appUrl}/redefinir-senha?token=${token}`;
+    try {
+      await sendMail({ to: { email: user.email, name: user.name }, ...resetPasswordTemplate({ name: user.name, link }) });
+    } catch (error) {
+      console.error("Falha ao enviar o email de redefinição de senha:", error);
+    }
+  }
+
+  // Sempre a mesma resposta, para não revelar quais emails têm conta
+  return { message: "Se existir uma conta com esse email, enviamos um link para criar uma nova senha." };
+}
+
+export async function resetPassword(token: string, password: string) {
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
+
+  if (!record || record.expiresAt < new Date()) {
+    throw new AppError("Link inválido ou expirado. Peça um novo em \"Esqueci minha senha\".", 400, "INVALID_TOKEN");
+  }
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(password, 10),
+        // Quem abriu o link provou que é dono do email, então a conta também fica confirmada
+        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+      },
+    }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
+    prisma.emailVerificationToken.deleteMany({ where: { userId: user.id } }),
+  ]);
+
+  return { message: "Senha alterada. Você já pode entrar com a nova senha." };
 }
 
 // ---------- Login ----------

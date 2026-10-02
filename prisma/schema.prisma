@@ -61,6 +61,10 @@ model User {
 model EmailVerificationToken {
   id        String   @id @default(uuid())
   tokenHash String   @unique
+  // Código de 6 dígitos (também em hash) para quem prefere digitar em vez de clicar no link
+  codeHash  String
+  // Tentativas erradas do código: depois de 5, é preciso pedir um novo
+  attempts  Int      @default(0)
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime

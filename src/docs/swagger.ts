@@ -14,7 +14,8 @@ export const swaggerSpec = swaggerJsdoc({
     servers: [{ url: "/api" }],
     tags: [
       { name: "Health", description: "Status da API" },
-      { name: "Auth", description: "Cadastro e login" },
+      { name: "Auth", description: "Cadastro, confirmação de email e login" },
+      { name: "Admin", description: "Gerenciamento de usuários (só administradores)" },
       { name: "Users", description: "Perfis e seguidores" },
       { name: "Posts", description: "Feed, curtidas e comentários" },
       { name: "Spots", description: "Spots no mapa e encontros" },

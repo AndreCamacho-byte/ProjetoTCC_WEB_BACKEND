@@ -41,28 +41,54 @@ async function generateUsername(email: string) {
   return username;
 }
 
+// ---------- Administradores ----------
+
+// Emails de administrador definidos na variável ADMIN_EMAILS (separados por vírgula)
+const adminEmails = new Set(
+  (env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+// Se o email da conta está na lista de administradores, garante a função ADMIN
+async function promoteIfAdmin(user: User) {
+  if (user.role === "ADMIN" || !adminEmails.has(user.email)) return user;
+  return prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } });
+}
+
 // ---------- Confirmação de email ----------
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // o link vale 24 horas
+const CODE_TTL_MS = 15 * 60 * 1000; // o código de 6 dígitos vale 15 minutos
+const MAX_CODE_ATTEMPTS = 5; // depois disso é preciso pedir um novo código
 const RESEND_COOLDOWN_MS = 60 * 1000; // no máximo um reenvio por minuto
 
 const hashToken = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
+// O id do usuário entra no hash para o mesmo código não gerar o mesmo hash em contas diferentes
+const hashCode = (userId: string, code: string) => hashToken(`${userId}:${code}`);
 
-// Cria um link novo (invalidando os anteriores) e envia o email.
+// Cria um link e um código novos (invalidando os anteriores) e envia o email.
 // Se o envio falhar, a conta continua criada: a pessoa pode pedir o reenvio depois.
 async function sendVerificationEmail(user: User, appUrl: string) {
   const token = crypto.randomBytes(32).toString("base64url");
+  const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
 
   await prisma.$transaction([
     prisma.emailVerificationToken.deleteMany({ where: { userId: user.id } }),
     prisma.emailVerificationToken.create({
-      data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + VERIFICATION_TTL_MS) },
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(token),
+        codeHash: hashCode(user.id, code),
+        expiresAt: new Date(Date.now() + VERIFICATION_TTL_MS),
+      },
     }),
   ]);
 
   const link = `${appUrl}/confirmar-email?token=${token}`;
   try {
-    await sendMail({ to: { email: user.email, name: user.name }, ...verifyEmailTemplate({ name: user.name, link }) });
+    await sendMail({ to: { email: user.email, name: user.name }, ...verifyEmailTemplate({ name: user.name, link, code }) });
   } catch (error) {
     console.error("Falha ao enviar o email de confirmação:", error);
   }
@@ -86,7 +112,7 @@ export async function register({ name, email, password }: RegisterInput, appUrl:
   await sendVerificationEmail(user, appUrl);
 
   // Sem token de login: a pessoa só entra depois de confirmar o email
-  return { email: user.email, message: "Conta criada. Enviamos um link de confirmação para o seu email." };
+  return { email: user.email, message: "Conta criada. Enviamos um código de confirmação para o seu email." };
 }
 
 export async function verifyEmail(token: string) {
@@ -99,13 +125,40 @@ export async function verifyEmail(token: string) {
     throw new AppError("Link inválido ou expirado. Peça um novo email de confirmação.", 400, "INVALID_TOKEN");
   }
 
+  return confirmUser(record.userId);
+}
+
+// Marca o email como confirmado, apaga os links/códigos pendentes e já faz o login,
+// para a pessoa não precisar digitar a senha logo depois de confirmar
+async function confirmUser(userId: string) {
   const [user] = await prisma.$transaction([
-    prisma.user.update({ where: { id: record.userId }, data: { emailVerifiedAt: new Date() } }),
-    prisma.emailVerificationToken.deleteMany({ where: { userId: record.userId } }),
+    prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } }),
+    prisma.emailVerificationToken.deleteMany({ where: { userId } }),
   ]);
 
-  // Já faz o login, para a pessoa não precisar digitar a senha logo depois de confirmar
-  return { user: toPublicUser(user), token: signToken(user.id) };
+  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user.id) };
+}
+
+// Confirmação digitando o código de 6 dígitos recebido por email
+export async function verifyEmailCode(email: string, code: string) {
+  const user = await prisma.user.findUnique({ where: { email }, include: { verificationTokens: true } });
+  const record = user?.verificationTokens[0];
+
+  // Mesma mensagem para email inexistente, conta já confirmada e código vencido
+  if (!user || !record || record.createdAt.getTime() + CODE_TTL_MS < Date.now()) {
+    throw new AppError("Código inválido ou expirado. Peça um novo código.", 400, "INVALID_CODE");
+  }
+
+  if (record.attempts >= MAX_CODE_ATTEMPTS) {
+    throw new AppError("Muitas tentativas erradas. Peça um novo código.", 429, "TOO_MANY_ATTEMPTS");
+  }
+
+  if (record.codeHash !== hashCode(user.id, code)) {
+    await prisma.emailVerificationToken.update({ where: { id: record.id }, data: { attempts: { increment: 1 } } });
+    throw new AppError("Código incorreto. Confira o email e tente de novo.", 400, "INVALID_CODE");
+  }
+
+  return confirmUser(user.id);
 }
 
 export async function resendVerification(email: string, appUrl: string) {
@@ -117,7 +170,7 @@ export async function resendVerification(email: string, appUrl: string) {
   }
 
   // Sempre a mesma resposta, para não revelar quais emails têm conta
-  return { message: "Se existir uma conta aguardando confirmação com esse email, enviamos um novo link." };
+  return { message: "Se existir uma conta aguardando confirmação com esse email, enviamos um novo código." };
 }
 
 // ---------- Login ----------
@@ -134,7 +187,7 @@ export async function login({ email, password }: LoginInput) {
     throw new AppError("Confirme seu email antes de entrar.", 403, "EMAIL_NOT_VERIFIED");
   }
 
-  return { user: toPublicUser(user), token: signToken(user.id) };
+  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user.id) };
 }
 
 export async function getUserById(id: string) {
@@ -142,5 +195,5 @@ export async function getUserById(id: string) {
   if (!user) {
     throw new AppError("Usuário não encontrado", 404);
   }
-  return toPublicUser(user);
+  return toPublicUser(await promoteIfAdmin(user));
 }

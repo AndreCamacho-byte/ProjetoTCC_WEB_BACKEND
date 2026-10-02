@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { adminRoutes } from "./admin.routes";
 import { authRoutes } from "./auth.routes";
 import { healthRoutes } from "./health.routes";
 
@@ -7,3 +8,4 @@ export const routes = Router();
 
 routes.use(healthRoutes);
 routes.use(authRoutes);
+routes.use(adminRoutes);

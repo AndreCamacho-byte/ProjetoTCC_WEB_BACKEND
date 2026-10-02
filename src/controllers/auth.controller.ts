@@ -20,6 +20,11 @@ const verifyEmailSchema = z.object({
   token: z.string().min(1, "Token não informado"),
 });
 
+const verifyCodeSchema = z.object({
+  email: emailField,
+  code: z.string().trim().regex(/^\d{6}$/, "O código tem 6 dígitos"),
+});
+
 const resendSchema = z.object({
   email: emailField,
 });
@@ -45,6 +50,11 @@ export async function login(req: Request, res: Response) {
 export async function verifyEmail(req: Request, res: Response) {
   const { token } = verifyEmailSchema.parse(req.body);
   res.json(await authService.verifyEmail(token));
+}
+
+export async function verifyEmailCode(req: Request, res: Response) {
+  const { email, code } = verifyCodeSchema.parse(req.body);
+  res.json(await authService.verifyEmailCode(email, code));
 }
 
 export async function resendVerification(req: Request, res: Response) {

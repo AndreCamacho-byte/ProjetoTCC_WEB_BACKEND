@@ -16,7 +16,7 @@ export const swaggerSpec = swaggerJsdoc({
       { name: "Health", description: "Status da API" },
       { name: "Auth", description: "Cadastro, confirmação de email e login" },
       { name: "Admin", description: "Gerenciamento de usuários (só administradores)" },
-      { name: "Users", description: "Perfis e seguidores" },
+      { name: "Users", description: "Configurações da conta, foto de perfil, perfis e seguidores" },
       { name: "Posts", description: "Feed, curtidas e comentários" },
       { name: "Spots", description: "Spots no mapa e encontros" },
       { name: "Marketplace", description: "Marcas, produtos, carrinho e pedidos" },

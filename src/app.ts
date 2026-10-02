@@ -9,7 +9,8 @@ import { routes } from "./routes";
 export const app = express();
 
 app.use(cors({ origin: env.CORS_ORIGIN }));
-app.use(express.json());
+// 1mb para caber a foto de perfil (o padrão do Express é 100kb)
+app.use(express.json({ limit: "1mb" }));
 
 // Prefixo /api: é esse caminho que o Nginx do frontend repassa para o backend na AWS
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

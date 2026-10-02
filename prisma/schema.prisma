@@ -42,6 +42,7 @@ model User {
   updatedAt       DateTime    @updatedAt
 
   verificationTokens EmailVerificationToken[]
+  avatar             UserAvatar?
   posts              Post[]
   comments           Comment[]
   likes              Like[]
@@ -54,6 +55,17 @@ model User {
   orders             Order[]
 
   @@map("users")
+}
+
+// Foto de perfil, guardada no banco (JPEG pequeno, já recortado pelo site).
+// Fica numa tabela separada para não ser carregada em toda consulta de usuário.
+model UserAvatar {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Bytes
+  updatedAt DateTime @updatedAt
+
+  @@map("user_avatars")
 }
 
 // Link de confirmação de email enviado no cadastro.

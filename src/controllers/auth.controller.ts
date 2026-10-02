@@ -4,7 +4,9 @@ import { env } from "../config/env";
 import * as authService from "../services/auth.service";
 import { birthDateSchema } from "../utils/age";
 
-const emailField = z.email("Email inválido").trim().toLowerCase();
+// Primeiro tira os espaços e passa para minúsculas, só depois confere o formato
+// (senão um espaço no fim, comum no teclado do celular, faria o email ser recusado)
+const emailField = z.string().trim().toLowerCase().pipe(z.email("Email inválido"));
 
 const passwordField = z.string().min(8, "Senha precisa ter pelo menos 8 caracteres").max(72);
 

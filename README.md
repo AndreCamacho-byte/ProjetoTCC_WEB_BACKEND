@@ -48,3 +48,20 @@ prisma/
 ## Documentando rotas no Swagger
 
 Escreva um comentário `@openapi` em cima da rota, dentro de `src/routes/`. Ele aparece automaticamente em `/api/docs`. Veja `src/routes/health.routes.ts` como exemplo.
+
+## Testes
+
+```bash
+npm test              # roda todos os testes uma vez
+npm run test:watch    # fica rodando e repete a cada alteração
+```
+
+Os testes ficam ao lado de cada arquivo (`*.test.ts`) e usam o [Vitest](https://vitest.dev). Eles não precisam de banco nem de internet: o Prisma e o envio de email são substituídos por versões simuladas (`src/test/prismaMock.ts`).
+
+| Arquivo | O que testa |
+|---|---|
+| `utils/age.test.ts` | cálculo da idade, regra dos 12 anos e validação da data de nascimento |
+| `emails/emails.test.ts` | conteúdo dos emails de confirmação e de redefinição de senha |
+| `middlewares/*.test.ts` | login por token, acesso de administrador, idade mínima e respostas de erro |
+| `services/*.test.ts` | regras de cadastro, login, confirmação de email, senha, conta e painel admin |
+| `routes/routes.test.ts` | as rotas pelo lado de fora: validação dos dados, códigos de status e proteções |

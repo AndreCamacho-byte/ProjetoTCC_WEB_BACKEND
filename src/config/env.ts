@@ -18,6 +18,9 @@ const envSchema = z.object({
   // Endereço do site usado nos links dos emails (ex.: http://13.219.234.57).
   // Se ficar vazio, usa o endereço de onde veio o cadastro.
   APP_URL: z.string().optional(),
+
+  // Emails (separados por vírgula) que viram administradores ao confirmar a conta ou fazer login
+  ADMIN_EMAILS: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

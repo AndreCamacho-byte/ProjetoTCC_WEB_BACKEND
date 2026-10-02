@@ -168,6 +168,52 @@ authRoutes.post("/auth/verify-email", authController.verifyEmail);
 
 /**
  * @openapi
+ * /auth/verify-code:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Confirma o email com o código de 6 dígitos e já faz o login
+ *     description: |
+ *       O código chega no mesmo email do link e vale por 15 minutos.
+ *       Depois de 5 tentativas erradas é preciso pedir um novo código em `/auth/resend-verification`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, code]
+ *             properties:
+ *               email: { type: string, format: email, example: tony@clutch.com }
+ *               code: { type: string, pattern: '^[0-9]{6}$', example: '048213' }
+ *     responses:
+ *       200:
+ *         description: Email confirmado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       400:
+ *         description: Código incorreto, vencido ou inexistente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error: { type: string }
+ *                 code: { type: string, example: INVALID_CODE }
+ *       429:
+ *         description: Muitas tentativas erradas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error: { type: string }
+ *                 code: { type: string, example: TOO_MANY_ATTEMPTS }
+ */
+authRoutes.post("/auth/verify-code", authController.verifyEmailCode);
+
+/**
+ * @openapi
  * /auth/resend-verification:
  *   post:
  *     tags: [Auth]

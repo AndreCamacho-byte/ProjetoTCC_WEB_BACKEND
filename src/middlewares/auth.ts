@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 import { AppError } from "../errors/AppError";
+import { prisma } from "../lib/prisma";
 
 declare global {
   namespace Express {
@@ -10,6 +11,19 @@ declare global {
     }
   }
 }
+
+// Protege rotas exclusivas de administradores. Use sempre depois do requireAuth.
+// A função é conferida no banco a cada requisição (e não no token), então remover o acesso
+// de alguém vale na hora, sem esperar o token expirar.
+export const requireAdmin: RequestHandler = async (req, _res, next) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } });
+
+  if (user?.role !== "ADMIN") {
+    throw new AppError("Acesso restrito a administradores", 403);
+  }
+
+  next();
+};
 
 // Protege rotas que exigem login. Espera o header: Authorization: Bearer <token>
 // Depois dele, o id do usuário logado fica em req.userId

@@ -8,6 +8,7 @@ vi.mock("../lib/mail", () => ({ sendMail: vi.fn() }));
 
 import { app } from "../app";
 import { env } from "../config/env";
+import { resetRateLimits } from "../middlewares/rateLimit";
 import { makeUser, prisma } from "../test/prismaMock";
 
 // Testa as rotas pelo lado de fora (requisição HTTP -> resposta), com o banco simulado:
@@ -16,6 +17,14 @@ import { makeUser, prisma } from "../test/prismaMock";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const tokenFor = (userId: string) => jwt.sign({ sub: userId }, env.JWT_SECRET);
 const bearer = (userId = USER_ID) => ({ Authorization: `Bearer ${tokenFor(userId)}` });
+
+// Define a conta que o banco simulado devolve (é ela que o requireAuth encontra pelo token)
+const loggedAs = (overrides: Parameters<typeof makeUser>[0] = {}) =>
+  prisma.user.findUnique.mockResolvedValue(makeUser(overrides));
+
+beforeEach(() => {
+  resetRateLimits();
+});
 
 describe("GET /api/health", () => {
   it("informa quando o banco está conectado", async () => {
@@ -144,6 +153,95 @@ describe("GET /api/auth/me", () => {
   });
 });
 
+describe("sessões", () => {
+  it("recusam o login antigo depois que a senha mudou", async () => {
+    loggedAs({ tokenVersion: 1 }); // o token do teste foi emitido na versão 0
+    const res = await request(app).get("/api/auth/me").set(bearer());
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
+  });
+
+  it("recusam o token de uma conta excluída", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    const res = await request(app).patch("/api/users/me").set(bearer()).send({ name: "Novo Nome" });
+    expect(res.status).toBe(401);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("limite de tentativas", () => {
+  const login = () => request(app).post("/api/auth/login").send({ email: "x@clutch.test", password: "errada123" });
+
+  it("bloqueia o login depois de 30 tentativas em 15 minutos", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    for (let i = 0; i < 30; i++) expect((await login()).status).toBe(401);
+
+    const blocked = await login();
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.code).toBe("RATE_LIMITED");
+    expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("conta cada endereço IP separadamente (cabeçalho X-Real-IP do Nginx)", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    for (let i = 0; i < 31; i++) await login().set("X-Real-IP", "200.1.1.1");
+
+    expect((await login().set("X-Real-IP", "200.1.1.1")).status).toBe(429);
+    expect((await login().set("X-Real-IP", "200.2.2.2")).status).toBe(401);
+  });
+
+  it("bloqueia pedidos de email depois de 10 em 15 minutos", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    const forgot = () => request(app).post("/api/auth/forgot-password").send({ email: "x@clutch.test" });
+
+    for (let i = 0; i < 10; i++) expect((await forgot()).status).toBe(200);
+
+    expect((await forgot()).status).toBe(429);
+  });
+});
+
+describe("PATCH /api/users/me/password", () => {
+  it("exige login", async () => {
+    const res = await request(app).patch("/api/users/me/password").send({ currentPassword: "a", newPassword: "b" });
+    expect(res.status).toBe(401);
+  });
+
+  it("recusa senha nova com menos de 8 caracteres", async () => {
+    loggedAs();
+    const res = await request(app)
+      .patch("/api/users/me/password")
+      .set(bearer())
+      .send({ currentPassword: "skate1234", newPassword: "curta" });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].field).toBe("newPassword");
+  });
+
+  it("responde 401 quando a senha atual está errada", async () => {
+    loggedAs({ passwordHash: await bcrypt.hash("skate1234", 4) });
+    const res = await request(app)
+      .patch("/api/users/me/password")
+      .set(bearer())
+      .send({ currentPassword: "errada123", newPassword: "novasenha1" });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("WRONG_PASSWORD");
+  });
+
+  it("troca a senha e devolve um token novo", async () => {
+    loggedAs({ passwordHash: await bcrypt.hash("skate1234", 4) });
+    prisma.user.update.mockResolvedValue(makeUser({ tokenVersion: 1 }));
+
+    const res = await request(app)
+      .patch("/api/users/me/password")
+      .set(bearer())
+      .send({ currentPassword: "skate1234", newPassword: "novasenha1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toEqual(expect.any(String));
+    expect(res.body.user).not.toHaveProperty("tokenVersion");
+  });
+});
+
 describe("rotas de administrador", () => {
   it("respondem 401 sem login", async () => {
     expect((await request(app).get("/api/admin/users")).status).toBe(401);
@@ -152,14 +250,14 @@ describe("rotas de administrador", () => {
   });
 
   it("respondem 403 para conta comum", async () => {
-    prisma.user.findUnique.mockResolvedValue({ role: "USER" });
+    loggedAs({ role: "USER" });
     const res = await request(app).get("/api/admin/users").set(bearer());
     expect(res.status).toBe(403);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 
   it("listam os usuários para um administrador", async () => {
-    prisma.user.findUnique.mockResolvedValue({ role: "ADMIN" });
+    loggedAs({ role: "ADMIN" });
     prisma.user.findMany.mockResolvedValue([makeUser()]);
     prisma.user.count.mockResolvedValue(1);
 
@@ -171,14 +269,14 @@ describe("rotas de administrador", () => {
   });
 
   it("recusam id que não é um UUID", async () => {
-    prisma.user.findUnique.mockResolvedValue({ role: "ADMIN" });
+    loggedAs({ role: "ADMIN" });
     const res = await request(app).delete("/api/admin/users/abc").set(bearer());
     expect(res.status).toBe(400);
     expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 
   it("recusam página maior que o limite de 100 por página", async () => {
-    prisma.user.findUnique.mockResolvedValue({ role: "ADMIN" });
+    loggedAs({ role: "ADMIN" });
     const res = await request(app).get("/api/admin/users?pageSize=500").set(bearer());
     expect(res.status).toBe(400);
   });
@@ -192,16 +290,19 @@ describe("configurações da conta", () => {
   });
 
   it.each(["A B", "ab", "COM_MAIUSCULA!", "nome-com-hifen"])("recusam o @username inválido %j", async (username) => {
+    loggedAs();
     const res = await request(app).patch("/api/users/me").set(bearer()).send({ username });
     expect(res.status).toBe(400);
   });
 
   it("recusam alteração sem nenhum campo", async () => {
+    loggedAs();
     const res = await request(app).patch("/api/users/me").set(bearer()).send({});
     expect(res.status).toBe(400);
   });
 
   it("recusam excluir a conta sem informar a senha", async () => {
+    loggedAs();
     const res = await request(app).delete("/api/users/me").set(bearer()).send({});
     expect(res.status).toBe(400);
     expect(prisma.user.delete).not.toHaveBeenCalled();
@@ -213,6 +314,7 @@ describe("foto de perfil", () => {
   const dataUrl = (bytes: Buffer, type = "image/jpeg") => `data:${type};base64,${bytes.toString("base64")}`;
 
   beforeEach(() => {
+    loggedAs();
     prisma.user.update.mockImplementation(async ({ data }) => makeUser(data));
   });
 
@@ -285,6 +387,7 @@ describe("outras respostas", () => {
         "/users/me",
         "/users/me/avatar",
         "/users/me/birth-date",
+        "/users/me/password",
         "/admin/users",
         "/admin/users/{id}",
       ]),

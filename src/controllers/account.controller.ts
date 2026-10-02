@@ -24,6 +24,11 @@ const avatarSchema = z.object({
 
 const birthDateBodySchema = z.object({ birthDate: birthDateSchema });
 
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1, "Informe a senha atual"),
+  newPassword: z.string().min(8, "Senha precisa ter pelo menos 8 caracteres").max(72),
+});
+
 const deleteSchema = z.object({
   password: z.string().min(1, "Informe a senha"),
 });
@@ -32,6 +37,11 @@ const idSchema = z.object({ id: z.uuid("Id inválido") });
 
 export async function updateProfile(req: Request, res: Response) {
   res.json(await accountService.updateProfile(req.userId!, profileSchema.parse(req.body)));
+}
+
+export async function changePassword(req: Request, res: Response) {
+  const { currentPassword, newPassword } = passwordSchema.parse(req.body);
+  res.json(await accountService.changePassword(req.userId!, currentPassword, newPassword));
 }
 
 export async function setBirthDate(req: Request, res: Response) {

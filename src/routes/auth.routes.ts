@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as authController from "../controllers/auth.controller";
 import { requireAuth } from "../middlewares/auth";
+import { limits } from "../middlewares/rateLimit";
 
 export const authRoutes = Router();
 
@@ -56,6 +57,8 @@ export const authRoutes = Router();
  *     tags: [Auth]
  *     summary: Cria uma conta
  *     description: |
+ *       Limite: 20 cadastros por hora por endereço IP (resposta 429 ao passar).
+ *       Se o email pertence a um cadastro que nunca foi confirmado, ele é substituído pelos dados novos.
  *       O @username é gerado automaticamente a partir do email.
  *       A conta nasce **sem confirmação**: é enviado um email com um link (válido por 24h)
  *       e o login só é liberado depois que a pessoa clica nele. Por isso esta rota não devolve token.
@@ -92,7 +95,7 @@ export const authRoutes = Router();
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-authRoutes.post("/auth/register", authController.register);
+authRoutes.post("/auth/register", limits.register, limits.dailyEmails, authController.register);
 
 /**
  * @openapi
@@ -100,6 +103,7 @@ authRoutes.post("/auth/register", authController.register);
  *   post:
  *     tags: [Auth]
  *     summary: Faz login e devolve o token JWT
+ *     description: Limite de 30 tentativas a cada 15 minutos por endereço IP (resposta 429 ao passar).
  *     requestBody:
  *       required: true
  *       content:
@@ -136,7 +140,7 @@ authRoutes.post("/auth/register", authController.register);
  *                 error: { type: string, example: Confirme seu email antes de entrar. }
  *                 code: { type: string, example: EMAIL_NOT_VERIFIED }
  */
-authRoutes.post("/auth/login", authController.login);
+authRoutes.post("/auth/login", limits.login, authController.login);
 
 /**
  * @openapi
@@ -170,7 +174,7 @@ authRoutes.post("/auth/login", authController.login);
  *                 error: { type: string }
  *                 code: { type: string, example: INVALID_TOKEN }
  */
-authRoutes.post("/auth/verify-email", authController.verifyEmail);
+authRoutes.post("/auth/verify-email", limits.tokenUse, authController.verifyEmail);
 
 /**
  * @openapi
@@ -216,7 +220,7 @@ authRoutes.post("/auth/verify-email", authController.verifyEmail);
  *                 error: { type: string }
  *                 code: { type: string, example: TOO_MANY_ATTEMPTS }
  */
-authRoutes.post("/auth/verify-code", authController.verifyEmailCode);
+authRoutes.post("/auth/verify-code", limits.tokenUse, authController.verifyEmailCode);
 
 /**
  * @openapi
@@ -243,7 +247,12 @@ authRoutes.post("/auth/verify-code", authController.verifyEmailCode);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Message' }
  */
-authRoutes.post("/auth/resend-verification", authController.resendVerification);
+authRoutes.post(
+  "/auth/resend-verification",
+  limits.emailRequest,
+  limits.dailyEmails,
+  authController.resendVerification,
+);
 
 /**
  * @openapi
@@ -270,7 +279,7 @@ authRoutes.post("/auth/resend-verification", authController.resendVerification);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Message' }
  */
-authRoutes.post("/auth/forgot-password", authController.forgotPassword);
+authRoutes.post("/auth/forgot-password", limits.emailRequest, limits.dailyEmails, authController.forgotPassword);
 
 /**
  * @openapi
@@ -305,7 +314,7 @@ authRoutes.post("/auth/forgot-password", authController.forgotPassword);
  *                 error: { type: string }
  *                 code: { type: string, example: INVALID_TOKEN }
  */
-authRoutes.post("/auth/reset-password", authController.resetPassword);
+authRoutes.post("/auth/reset-password", limits.tokenUse, authController.resetPassword);
 
 /**
  * @openapi

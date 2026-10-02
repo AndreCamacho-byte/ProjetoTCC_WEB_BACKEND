@@ -23,9 +23,10 @@ beforeEach(async () => {
 });
 
 describe("toPublicUser", () => {
-  it("nunca devolve o hash da senha", () => {
+  it("nunca devolve o hash da senha nem o controle de sessões", () => {
     const user = auth.toPublicUser(makeUser({ passwordHash: "segredo" }));
     expect(user).not.toHaveProperty("passwordHash");
+    expect(user).not.toHaveProperty("tokenVersion");
     expect(user.email).toBe("tony@clutch.test");
   });
 });
@@ -49,6 +50,33 @@ describe("register", () => {
     await expect(auth.register(input, APP_URL)).rejects.toMatchObject({ statusCode: 409 });
     expect(prisma.user.create).not.toHaveBeenCalled();
     expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("libera o email de um cadastro que nunca foi confirmado, trocando os dados pelos novos", async () => {
+    const pending = makeUser({ id: "pendente", email: input.email, emailVerifiedAt: null, name: "Outra Pessoa" });
+    prisma.user.findUnique.mockResolvedValue(pending);
+    prisma.user.update.mockImplementation(async ({ data }) => ({ ...pending, name: data.name }));
+
+    const result = await auth.register(input, APP_URL);
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    const { where, data } = prisma.user.update.mock.calls[0][0];
+    expect(where).toEqual({ id: "pendente" });
+    expect(data.name).toBe("Tony Teste");
+    expect(await bcrypt.compare("skate1234", data.passwordHash)).toBe(true);
+    // quem tinha feito o cadastro anterior perde qualquer acesso
+    expect(data.tokenVersion).toEqual({ increment: 1 });
+    expect(result.email).toBe(input.email);
+    expect(sendMailMock).toHaveBeenCalledOnce();
+  });
+
+  it("apaga cadastros não confirmados com mais de 7 dias", async () => {
+    await auth.register(input, APP_URL);
+
+    const { where } = prisma.user.deleteMany.mock.calls[0][0];
+    expect(where.emailVerifiedAt).toBeNull();
+    const days = (Date.now() - where.createdAt.lt.getTime()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeCloseTo(7, 1);
   });
 
   it("guarda a senha embaralhada, nunca em texto puro", async () => {
@@ -148,6 +176,7 @@ describe("login", () => {
     expect(result.user).not.toHaveProperty("passwordHash");
     const payload = jwt.verify(result.token, env.JWT_SECRET) as jwt.JwtPayload;
     expect(payload.sub).toBe(makeUser().id);
+    expect(payload.v).toBe(0);
   });
 
   it("transforma em administrador a conta cujo email está em ADMIN_EMAILS", async () => {
@@ -369,6 +398,8 @@ describe("resetPassword", () => {
     expect(data.passwordHash).not.toBe("novasenha1");
     expect(await bcrypt.compare("novasenha1", data.passwordHash)).toBe(true);
     expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: user.id } });
+    // encerra os logins que estavam abertos com a senha antiga
+    expect(data.tokenVersion).toEqual({ increment: 1 });
   });
 
   it("confirma o email de quem ainda não tinha confirmado, e mantém a data de quem já tinha", async () => {

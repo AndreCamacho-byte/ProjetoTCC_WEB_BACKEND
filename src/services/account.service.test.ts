@@ -1,9 +1,11 @@
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/prisma", () => import("../test/prismaMock"));
 
+import { env } from "../config/env";
 import { makeUser, prisma } from "../test/prismaMock";
 import * as account from "./account.service";
 
@@ -32,6 +34,49 @@ describe("updateProfile", () => {
   it("aceita quando o @username enviado já é o da própria pessoa", async () => {
     prisma.user.findUnique.mockResolvedValue(makeUser({ id: USER_ID, username: "tony" }));
     await expect(account.updateProfile(USER_ID, { username: "tony" })).resolves.toMatchObject({ username: "tony" });
+  });
+});
+
+describe("changePassword", () => {
+  let passwordHash: string;
+  beforeEach(async () => {
+    passwordHash ??= await bcrypt.hash("skate1234", 4);
+    prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash, tokenVersion: 2 }));
+    prisma.user.update.mockImplementation(async ({ data }) =>
+      makeUser({ passwordHash: data.passwordHash, tokenVersion: 3 }),
+    );
+  });
+
+  it("exige a senha atual correta", async () => {
+    await expect(account.changePassword(USER_ID, "errada123", "novasenha1")).rejects.toMatchObject({
+      statusCode: 401,
+      code: "WRONG_PASSWORD",
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("recusa a nova senha igual à atual", async () => {
+    await expect(account.changePassword(USER_ID, "skate1234", "skate1234")).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("salva a senha nova embaralhada e encerra os outros logins", async () => {
+    await account.changePassword(USER_ID, "skate1234", "novasenha1");
+
+    const { data } = prisma.user.update.mock.calls[0][0];
+    expect(data.passwordHash).not.toBe("novasenha1");
+    expect(await bcrypt.compare("novasenha1", data.passwordHash)).toBe(true);
+    expect(data.tokenVersion).toEqual({ increment: 1 });
+  });
+
+  it("devolve um token novo, já na versão nova, para o aparelho atual continuar logado", async () => {
+    const result = await account.changePassword(USER_ID, "skate1234", "novasenha1");
+
+    const payload = jwt.verify(result.token, env.JWT_SECRET) as jwt.JwtPayload;
+    expect(payload.v).toBe(3);
+    expect(result.user).not.toHaveProperty("passwordHash");
   });
 });
 

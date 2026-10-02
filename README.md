@@ -17,6 +17,18 @@ npm run dev               # sobe a API com recarregamento automático
 - Swagger: http://localhost:3000/api/docs
 - Status: http://localhost:3000/api/health
 
+## Variáveis de ambiente
+
+Ficam no arquivo `.env` (modelo em `.env.example`). Esse arquivo nunca vai para o GitHub.
+
+| Variável | Para que serve |
+|---|---|
+| `DATABASE_URL` | Conexão com o PostgreSQL (Aiven) |
+| `JWT_SECRET` | Chave que assina os tokens de login |
+| `BREVO_API_KEY` e `MAIL_FROM_EMAIL` | Envio de emails pelo Brevo. Sem a chave, o email aparece só no terminal |
+| `ADMIN_EMAILS` | Emails (separados por vírgula) das contas que são administradoras |
+| `PORT`, `CORS_ORIGIN`, `APP_URL` | Opcionais |
+
 ## Scripts
 
 | Script | O que faz |

@@ -66,11 +66,6 @@ export const usersRoutes = Router();
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
- *       409:
- *         description: A conta tem pedidos registrados
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
 usersRoutes.patch("/users/me", requireAuth, accountController.updateProfile);
 usersRoutes.delete("/users/me", requireAuth, accountController.deleteAccount);

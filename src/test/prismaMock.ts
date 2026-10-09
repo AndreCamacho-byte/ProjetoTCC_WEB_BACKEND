@@ -32,10 +32,56 @@ export const prisma = {
     upsert: vi.fn(),
     deleteMany: vi.fn(),
   },
-  // Uma transação só espera todas as operações terminarem
-  $transaction: vi.fn(async (operations: unknown[]) => Promise.all(operations)),
+  brand: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  product: {
+    findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  productVariant: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  productImage: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  cartItem: {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  order: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  // Uma transação com lista só espera todas as operações terminarem;
+  // com função, roda a função passando o próprio Prisma simulado.
+  $transaction: vi.fn(async (operations: unknown): Promise<unknown> => {
+    if (typeof operations === "function") return operations(prisma);
+    return Promise.all(operations as unknown[]);
+  }),
   $queryRaw: vi.fn(),
 };
+
+export const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
 // Usuário de exemplo. Passe só os campos que importam para o teste.
 export function makeUser(overrides: Partial<User> = {}): User {

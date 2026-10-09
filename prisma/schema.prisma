@@ -192,7 +192,6 @@ model Product {
   name        String
   description String
   price       Decimal  @db.Decimal(10, 2)
-  imageUrls   String[]
   active      Boolean  @default(true)
   brandId     String
   brand       Brand    @relation(fields: [brandId], references: [id])
@@ -200,9 +199,25 @@ model Product {
   updatedAt   DateTime @updatedAt
 
   variants ProductVariant[]
+  images   ProductImage[]
 
   @@index([brandId])
   @@map("products")
+}
+
+// Fotos dos produtos, guardadas no banco (JPEG já recortado e reduzido pelo site),
+// do mesmo jeito que a foto de perfil. São servidas por GET /products/images/:id
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  data      Bytes
+  // Ordem em que aparece na página do produto (a de menor número é a capa)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId, position])
+  @@map("product_images")
 }
 
 // Cada tamanho de um produto tem seu próprio estoque (ex.: camiseta P, M, G)
@@ -234,13 +249,25 @@ model CartItem {
 }
 
 model Order {
-  id        String      @id @default(uuid())
-  status    OrderStatus @default(PENDENTE)
-  total     Decimal     @db.Decimal(10, 2)
-  userId    String
-  user      User        @relation(fields: [userId], references: [id])
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id     String      @id @default(uuid())
+  status OrderStatus @default(PENDENTE)
+  total  Decimal     @db.Decimal(10, 2)
+  userId String
+  // Excluir a conta apaga também os pedidos dela (direito de exclusão dos dados)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Endereço de entrega, copiado para o pedido: fica como era no dia da compra
+  recipientName String
+  zipCode       String
+  street        String
+  addressNumber String
+  complement    String?
+  district      String
+  city          String
+  state         String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   items OrderItem[]
 
@@ -249,14 +276,19 @@ model Order {
 }
 
 model OrderItem {
-  id        String         @id @default(uuid())
-  quantity  Int
-  // Preço no momento da compra, para o histórico não mudar se o produto mudar de preço
-  unitPrice Decimal        @db.Decimal(10, 2)
-  orderId   String
-  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variantId String
-  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  id          String          @id @default(uuid())
+  quantity    Int
+  // Preço, nome, marca e tamanho copiados no momento da compra, para o histórico não mudar
+  // se o produto for editado ou apagado depois
+  unitPrice   Decimal         @db.Decimal(10, 2)
+  productName String
+  brandName   String
+  size        String
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Fica nulo se o produto (ou o tamanho) for apagado da loja
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
 }

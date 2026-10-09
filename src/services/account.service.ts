@@ -1,5 +1,4 @@
 import bcrypt from "bcryptjs";
-import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
 import { signToken, toPublicUser } from "./auth.service";
@@ -89,13 +88,6 @@ export async function deleteAccount(userId: string, password: string) {
     throw new AppError("Senha incorreta", 401, "WRONG_PASSWORD");
   }
 
-  try {
-    await prisma.user.delete({ where: { id: userId } });
-  } catch (error) {
-    // Pedidos do marketplace não são apagados junto com a conta
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
-      throw new AppError("Sua conta tem pedidos registrados e não pode ser excluída por aqui", 409);
-    }
-    throw error;
-  }
+  // O banco apaga junto tudo que é da conta: foto, carrinho, pedidos, posts e encontros
+  await prisma.user.delete({ where: { id: userId } });
 }

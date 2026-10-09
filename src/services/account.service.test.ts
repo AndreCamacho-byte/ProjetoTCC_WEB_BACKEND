@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/prisma", () => import("../test/prismaMock"));
@@ -158,12 +157,5 @@ describe("deleteAccount", () => {
   it("responde 401 se a conta não existe mais", async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     await expect(account.deleteAccount(USER_ID, "skate1234")).rejects.toMatchObject({ statusCode: 401 });
-  });
-
-  it("responde 409 se a conta tem pedidos registrados", async () => {
-    prisma.user.delete.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "6.0.0" }),
-    );
-    await expect(account.deleteAccount(USER_ID, "skate1234")).rejects.toMatchObject({ statusCode: 409 });
   });
 });

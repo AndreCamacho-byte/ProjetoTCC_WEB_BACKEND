@@ -111,7 +111,7 @@ adminRoutes.get("/admin/users", adminController.listUsers);
  *     summary: Remove um usuário
  *     description: |
  *       Apaga a conta e tudo que é dela (posts, comentários, curtidas, seguidores e encontros).
- *       Um administrador não pode remover a própria conta, e contas com pedidos no marketplace não são removidas.
+ *       Um administrador não pode remover a própria conta. Os pedidos do marketplace da conta removida são apagados junto.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -134,11 +134,6 @@ adminRoutes.get("/admin/users", adminController.listUsers);
  *             schema: { $ref: '#/components/schemas/Error' }
  *       404:
  *         description: Usuário não encontrado
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       409:
- *         description: Usuário tem pedidos registrados
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }

@@ -129,11 +129,6 @@ describe("deleteUser", () => {
     await expect(admin.deleteUser("user-1", ADMIN_ID)).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("responde 409 se o usuário tem pedidos registrados", async () => {
-    prisma.user.delete.mockRejectedValue(prismaError("P2003"));
-    await expect(admin.deleteUser("user-1", ADMIN_ID)).rejects.toMatchObject({ statusCode: 409 });
-  });
-
   it("repassa erros que não conhece", async () => {
     prisma.user.delete.mockRejectedValue(new Error("falha inesperada"));
     await expect(admin.deleteUser("user-1", ADMIN_ID)).rejects.toThrow("falha inesperada");

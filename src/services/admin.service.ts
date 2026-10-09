@@ -74,10 +74,6 @@ export async function deleteUser(id: string, adminId: string) {
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2025") throw new AppError("Usuário não encontrado", 404);
-      // Pedidos do marketplace não são apagados junto com a conta
-      if (error.code === "P2003") {
-        throw new AppError("Este usuário tem pedidos registrados e não pode ser removido", 409);
-      }
     }
     throw error;
   }

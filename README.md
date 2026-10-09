@@ -76,4 +76,6 @@ Os testes ficam ao lado de cada arquivo (`*.test.ts`) e usam o [Vitest](https://
 | `emails/emails.test.ts` | conteúdo dos emails de confirmação e de redefinição de senha |
 | `middlewares/*.test.ts` | login por token, acesso de administrador, idade mínima e respostas de erro |
 | `services/*.test.ts` | regras de cadastro, login, confirmação de email, senha, conta e painel admin |
+| `services/market.service.test.ts` | loja: catálogo, carrinho, fechamento de pedido (estoque), situação dos pedidos e cadastro de produtos |
 | `routes/routes.test.ts` | as rotas pelo lado de fora: validação dos dados, códigos de status e proteções |
+| `routes/market.routes.test.ts` | rotas da loja: o que é público, o que exige login e 12 anos, o que é só do administrador |

@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { adminRoutes } from "./admin.routes";
+import { adminMarketRoutes } from "./adminMarket.routes";
 import { authRoutes } from "./auth.routes";
 import { healthRoutes } from "./health.routes";
+import { marketRoutes } from "./market.routes";
 import { usersRoutes } from "./users.routes";
 
 // Todas as rotas da API são registradas aqui e ficam sob o prefixo /api (veja app.ts)
@@ -10,4 +12,7 @@ export const routes = Router();
 routes.use(healthRoutes);
 routes.use(authRoutes);
 routes.use(adminRoutes);
+// Precisa vir depois de adminRoutes, que é quem confere o login de administrador em /admin
+routes.use(adminMarketRoutes);
 routes.use(usersRoutes);
+routes.use(marketRoutes);

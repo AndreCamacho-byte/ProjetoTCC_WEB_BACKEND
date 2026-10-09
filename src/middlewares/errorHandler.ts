@@ -27,7 +27,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const databaseUnavailable =
     err instanceof Prisma.PrismaClientInitializationError ||
     (err instanceof Prisma.PrismaClientKnownRequestError &&
-      ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(err.code));
+      ["P1001", "P1002", "P1008", "P1017", "P2024", "P2028"].includes(err.code));
 
   if (databaseUnavailable) {
     console.error("Banco de dados indisponível:", err.message);

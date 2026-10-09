@@ -42,8 +42,16 @@ const resetPasswordSchema = z.object({
 
 // Endereço do site para montar o link do email. Na AWS o IP do frontend muda a cada deploy,
 // então, se APP_URL não estiver configurada, usa o endereço de onde o navegador fez a requisição.
+//
+// Ordem de confiança:
+// 1. APP_URL, se configurada;
+// 2. X-Site-Url, que o Nginx do frontend preenche com o endereço público da máquina. O Nginx
+//    sempre sobrescreve esse cabeçalho, então quem acessa o site não consegue forjar;
+// 3. Origin, usado só no computador de desenvolvimento (onde não há Nginx na frente).
+// Sem isso, alguém poderia pedir um cadastro informando o endereço de outro site e fazer o
+// email de confirmação sair com um link falso.
 function getAppUrl(req: Request) {
-  const url = env.APP_URL || req.get("origin") || `${req.protocol}://${req.get("host")}`;
+  const url = env.APP_URL || req.get("x-site-url") || req.get("origin") || `${req.protocol}://${req.get("host")}`;
   return url.replace(/\/+$/, "");
 }
 

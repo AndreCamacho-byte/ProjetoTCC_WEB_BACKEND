@@ -8,6 +8,7 @@ vi.mock("../lib/mail", () => ({ sendMail: vi.fn() }));
 
 import { app } from "../app";
 import { env } from "../config/env";
+import { sendMail } from "../lib/mail";
 import { resetRateLimits } from "../middlewares/rateLimit";
 import { makeUser, prisma } from "../test/prismaMock";
 
@@ -403,5 +404,44 @@ describe("outras respostas", () => {
 
     expect(res.status).toBe(503);
     vi.restoreAllMocks();
+  });
+});
+
+describe("cabeçalhos de segurança", () => {
+  it("vão em todas as respostas da API, sem anunciar a tecnologia do servidor", async () => {
+    const res = await request(app).get("/api/nao-existe");
+
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["x-frame-options"]).toBe("DENY");
+    expect(res.headers["referrer-policy"]).toBe("no-referrer");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["x-powered-by"]).toBeUndefined();
+  });
+});
+
+describe("endereço usado nos links dos emails", () => {
+  const register = () =>
+    request(app)
+      .post("/api/auth/register")
+      .send({ name: "Tony Teste", email: "tony@clutch.test", password: "skate1234", birthDate: "2000-01-15" });
+
+  beforeEach(() => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockImplementation(async ({ data }) => makeUser({ ...data, emailVerifiedAt: null }));
+  });
+
+  it("usa o endereço informado pelo Nginx (X-Site-Url), e não o que o navegador diz", async () => {
+    await register().set("X-Site-Url", "http://203.0.113.5").set("Origin", "http://site-falso.example");
+
+    const mail = vi.mocked(sendMail).mock.calls[0][0];
+    expect(mail.text).toContain("http://203.0.113.5/confirmar-email?token=");
+    expect(mail.text).not.toContain("site-falso");
+  });
+
+  it("no computador de desenvolvimento, sem Nginx, usa o endereço de onde veio a requisição", async () => {
+    await register().set("Origin", "http://localhost:5173");
+
+    const mail = vi.mocked(sendMail).mock.calls[0][0];
+    expect(mail.text).toContain("http://localhost:5173/confirmar-email?token=");
   });
 });

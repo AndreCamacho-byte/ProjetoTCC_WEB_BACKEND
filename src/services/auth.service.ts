@@ -248,11 +248,17 @@ export async function resetPassword(token: string, password: string) {
 
 // ---------- Login ----------
 
+// Hash usado quando o email não existe, só para a conferência da senha levar o mesmo tempo
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("senha-de-uma-conta-que-nao-existe", 10);
+
 export async function login({ email, password }: LoginInput) {
   const user = await prisma.user.findUnique({ where: { email } });
 
-  // Mesma mensagem para email inexistente e senha errada, para não revelar quais emails têm conta
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  // A senha é conferida mesmo quando o email não existe (contra um hash qualquer). Sem isso a
+  // resposta viria mais rápida para emails sem conta, e daria para descobrir quem é cadastrado
+  // medindo o tempo. A mensagem também é a mesma nos dois casos.
+  const passwordMatches = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordMatches) {
     throw new AppError("Email ou senha incorretos", 401);
   }
 

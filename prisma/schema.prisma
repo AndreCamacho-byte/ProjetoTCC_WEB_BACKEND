@@ -44,6 +44,9 @@ model User {
   // Aumenta toda vez que a senha muda. Cada login guarda o número da época em que foi feito;
   // se o número da conta já é outro, aquele login deixa de valer (derruba as sessões antigas).
   tokenVersion    Int         @default(0)
+  // Preenchido quando um administrador suspende a conta: a pessoa não consegue entrar
+  // e os posts dela somem da comunidade até a suspensão ser retirada.
+  suspendedAt     DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -113,8 +116,8 @@ model EmailVerificationToken {
 
 model Post {
   id        String   @id @default(uuid())
+  // Texto do post (pode ficar vazio quando o post é só uma foto)
   content   String
-  mediaUrl  String?
   authorId  String
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -122,9 +125,21 @@ model Post {
 
   comments Comment[]
   likes    Like[]
+  image    PostImage?
 
   @@index([authorId, createdAt])
+  @@index([createdAt])
   @@map("posts")
+}
+
+// Foto de um post, guardada no banco como a foto de perfil (no máximo uma por post)
+model PostImage {
+  postId    String   @id
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@map("post_images")
 }
 
 model Comment {
@@ -159,6 +174,7 @@ model Follow {
   createdAt   DateTime @default(now())
 
   @@id([followerId, followingId])
+  @@index([followingId])
   @@map("follows")
 }
 

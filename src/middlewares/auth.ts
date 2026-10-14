@@ -5,6 +5,8 @@ import { env } from "../config/env";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
 
+export const SUSPENDED_MESSAGE = "Sua conta está suspensa. Se achar que é um engano, fale com a gente pelo email de contato.";
+
 declare global {
   namespace Express {
     interface Request {
@@ -37,7 +39,7 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
 
   const user = await prisma.user.findUnique({
     where: { id: payload.sub ?? "" },
-    select: { id: true, role: true, birthDate: true, tokenVersion: true, emailVerifiedAt: true },
+    select: { id: true, role: true, birthDate: true, tokenVersion: true, emailVerifiedAt: true, suspendedAt: true },
   });
 
   // Tokens emitidos antes de existir o número de versão contam como versão 0
@@ -45,6 +47,11 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
 
   if (!user || !user.emailVerifiedAt || user.tokenVersion !== tokenVersion) {
     throw new AppError("Sessão encerrada. Entre de novo.", 401, "SESSION_EXPIRED");
+  }
+
+  // Conta suspensa por um administrador perde o acesso na hora
+  if (user.suspendedAt) {
+    throw new AppError(SUSPENDED_MESSAGE, 403, "ACCOUNT_SUSPENDED");
   }
 
   req.userId = user.id;

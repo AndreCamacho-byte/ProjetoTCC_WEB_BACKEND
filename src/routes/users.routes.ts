@@ -10,7 +10,7 @@ export const usersRoutes = Router();
  * /users/me:
  *   patch:
  *     tags: [Users]
- *     summary: Altera o nome ou o @username da própria conta
+ *     summary: Altera o nome, o @username, a bio ou o nível de skate da própria conta
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -22,6 +22,8 @@ export const usersRoutes = Router();
  *             properties:
  *               name: { type: string, example: Tony Hawk }
  *               username: { type: string, example: tonyhawk, description: 3 a 20 letras minúsculas, números ou _ }
+ *               bio: { type: string, nullable: true, maxLength: 160, example: Ando de skate desde 2015 }
+ *               skateLevel: { type: string, nullable: true, enum: [INICIANTE, INTERMEDIARIO, AVANCADO, PROFISSIONAL] }
  *     responses:
  *       200:
  *         description: Conta atualizada

@@ -71,6 +71,26 @@ describe("updateUser", () => {
     expect(result.role).toBe("USER");
   });
 
+  it("suspende e libera uma conta", async () => {
+    const suspended = await admin.updateUser("user-1", ADMIN_ID, { suspended: true });
+    expect(suspended.suspendedAt).toBeInstanceOf(Date);
+
+    prisma.user.findUnique.mockResolvedValue(makeUser({ id: "user-1", suspendedAt: new Date() }));
+    const released = await admin.updateUser("user-1", ADMIN_ID, { suspended: false });
+    expect(released.suspendedAt).toBeNull();
+  });
+
+  it("não deixa o administrador suspender a si mesmo", async () => {
+    await expect(admin.updateUser(ADMIN_ID, ADMIN_ID, { suspended: true })).rejects.toMatchObject({ statusCode: 400 });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("não rebaixa pelo painel quem é admin pela configuração (ADMIN_EMAILS)", async () => {
+    prisma.user.findUnique.mockResolvedValue(makeUser({ id: "user-1", email: "admin@clutch.test", role: "ADMIN" }));
+    await expect(admin.updateUser("user-1", ADMIN_ID, { role: "USER" })).rejects.toMatchObject({ statusCode: 400 });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it("recusa um @username que já é de outra conta", async () => {
     prisma.user.findUnique.mockImplementation(async ({ where }) =>
       where.username === "leticia" ? makeUser({ id: "user-2", username: "leticia" }) : target,

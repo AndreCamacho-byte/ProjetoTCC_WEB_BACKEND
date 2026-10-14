@@ -1,9 +1,10 @@
+import type { SkateLevel } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
 import { signToken, toPublicUser } from "./auth.service";
 
-type ProfileInput = { name?: string; username?: string };
+type ProfileInput = { name?: string; username?: string; bio?: string | null; skateLevel?: SkateLevel | null };
 
 // Configurações da própria conta (o que a pessoa logada pode mudar em si mesma)
 

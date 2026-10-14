@@ -8,6 +8,7 @@ import { vi } from "vitest";
 export const prisma = {
   user: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     findMany: vi.fn(),
     count: vi.fn(),
@@ -72,6 +73,33 @@ export const prisma = {
     create: vi.fn(),
     update: vi.fn(),
   },
+  post: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+  },
+  postImage: {
+    findUnique: vi.fn(),
+  },
+  like: {
+    count: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  comment: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+  },
+  follow: {
+    count: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   // Uma transação com lista só espera todas as operações terminarem;
   // com função, roda a função passando o próprio Prisma simulado.
   $transaction: vi.fn(async (operations: unknown): Promise<unknown> => {
@@ -98,6 +126,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     emailVerifiedAt: new Date("2026-01-01T00:00:00.000Z"),
     birthDate: new Date("2000-01-15T00:00:00.000Z"),
     tokenVersion: 0,
+    suspendedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,

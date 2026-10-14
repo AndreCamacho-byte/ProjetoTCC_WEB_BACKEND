@@ -21,6 +21,7 @@ export const authRoutes = Router();
  *         skateLevel: { type: string, nullable: true, enum: [INICIANTE, INTERMEDIARIO, AVANCADO, PROFISSIONAL] }
  *         role: { type: string, enum: [USER, ADMIN] }
  *         emailVerifiedAt: { type: string, format: date-time, nullable: true, description: Data da confirmação do email }
+ *         suspendedAt: { type: string, format: date-time, nullable: true, description: Data em que um administrador suspendeu a conta }
  *         birthDate:
  *           type: string
  *           format: date-time

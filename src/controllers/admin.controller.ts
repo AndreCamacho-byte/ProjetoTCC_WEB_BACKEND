@@ -23,6 +23,7 @@ const updateSchema = z
     emailVerified: z.boolean(),
     // null apaga a data (a idade volta a ficar "não verificada")
     birthDate: birthDateSchema.nullable(),
+    suspended: z.boolean(),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, "Informe pelo menos um campo para alterar");

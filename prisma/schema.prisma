@@ -65,6 +65,9 @@ model User {
   orders              Order[]
   savedPosts          SavedPost[]
   savedProducts       SavedProduct[]
+  conversationsA      Conversation[]           @relation("conversationUserA")
+  conversationsB      Conversation[]           @relation("conversationUserB")
+  messages            Message[]
 
   @@map("users")
 }
@@ -129,6 +132,7 @@ model Post {
   likes    Like[]
   images   PostImage[]
   savedBy  SavedPost[]
+  sharedIn Message[]
 
   @@index([authorId, createdAt])
   @@index([createdAt])
@@ -401,4 +405,49 @@ model MeetupParticipant {
 
   @@id([meetupId, userId])
   @@map("meetup_participants")
+}
+
+// ==========================================
+// CHAT ENTRE AMIGOS
+// ==========================================
+
+// Conversa entre duas pessoas. userA é sempre o id "menor" (ordem alfabética), assim cada
+// par tem uma conversa só. Cada lado guarda até quando já leu (para contar as não lidas).
+model Conversation {
+  id            String    @id @default(uuid())
+  userAId       String
+  userA         User      @relation("conversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId       String
+  userB         User      @relation("conversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  userAReadAt   DateTime?
+  userBReadAt   DateTime?
+  // Data da última mensagem: a lista de conversas vem ordenada por ela
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  messages Message[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId, lastMessageAt])
+  @@index([userBId, lastMessageAt])
+  @@map("conversations")
+}
+
+// Mensagem de texto e/ou um post compartilhado. Se o post for apagado, a mensagem fica
+// (postId vira nulo e o site mostra "post indisponível").
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  postId         String?
+  post           Post?        @relation(fields: [postId], references: [id], onDelete: SetNull)
+  // Marca que a mensagem levava um post (para saber que ele foi apagado depois)
+  sharedPost     Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
 }

@@ -16,9 +16,18 @@ const pageSchema = {
   pageSize: z.coerce.number().int().min(1).max(60).default(12),
 };
 
+export const CATEGORIES = ["ROUPA", "CALCADO", "SHAPE", "SKATE_MONTADO", "PECAS", "ACESSORIO", "OUTRO"] as const;
+
 const listProductsSchema = z.object({
   search: z.string().trim().max(100).optional(),
   brandId: z.uuid("Marca inválida").optional(),
+  category: z.enum(CATEGORIES).optional(),
+  // Lista de ids separados por vírgula (até 12), para as "últimas visitas"
+  ids: z
+    .string()
+    .transform((value) => value.split(",").filter(Boolean))
+    .pipe(z.array(z.uuid("Id inválido")).max(12))
+    .optional(),
   ...pageSchema,
 });
 
@@ -31,6 +40,11 @@ export async function listProducts(req: Request, res: Response) {
 export async function getProduct(req: Request, res: Response) {
   const { id } = idParam("id").parse(req.params);
   res.json(await catalog.getProduct(id));
+}
+
+export async function listRelated(req: Request, res: Response) {
+  const { id } = idParam("id").parse(req.params);
+  res.json(await catalog.listRelated(id));
 }
 
 export async function listBrands(_req: Request, res: Response) {
@@ -152,7 +166,34 @@ export async function deleteBrand(req: Request, res: Response) {
 
 const productSchema = z.object({
   name: text(2, 80, "Informe o nome do produto"),
-  description: text(2, 2000, "Informe a descrição"),
+  // Descrição completa (aparece na aba de detalhes); a primeira parte serve de resumo
+  description: text(2, 5000, "Informe a descrição"),
+  category: z.enum(CATEGORIES).optional(),
+  details: z
+    .array(
+      z.object({
+        label: text(1, 40, "Informe o nome do detalhe"),
+        value: text(1, 200, "Informe o valor do detalhe"),
+      }),
+    )
+    .max(15, "No máximo 15 detalhes")
+    .optional(),
+  faq: z
+    .array(
+      z.object({
+        question: text(3, 150, "Escreva a pergunta"),
+        answer: text(1, 1000, "Escreva a resposta"),
+      }),
+    )
+    .max(10, "No máximo 10 perguntas")
+    .optional(),
+  location: z
+    .string()
+    .trim()
+    .max(80)
+    .nullable()
+    .transform((value) => value || null)
+    .optional(),
   // Arredonda para centavos (evita preços como 99.999)
   price: z
     .number("Informe o preço")

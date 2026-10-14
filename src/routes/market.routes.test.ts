@@ -245,6 +245,55 @@ describe("administração da loja", () => {
     expect(res.body.details.map((d: { field: string }) => d.field).sort()).toEqual(["price", "variants"]);
   });
 
+  it("cadastra produto com tipo, ficha, perguntas e local", async () => {
+    loggedAs({ role: "ADMIN" });
+    prisma.brand.findUnique.mockResolvedValue(product.brand);
+    prisma.product.create.mockResolvedValue(product);
+
+    const res = await request(app)
+      .post("/api/admin/products")
+      .set(bearer)
+      .send({
+        ...newProduct,
+        category: "SHAPE",
+        details: [{ label: "Madeira", value: "Maple" }],
+        faq: [{ question: "Vem com lixa?", answer: "Sim" }],
+        location: "  ",
+        variants: [{ size: "Único", stock: 3 }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(prisma.product.create.mock.calls[0][0].data).toMatchObject({
+      category: "SHAPE",
+      details: [{ label: "Madeira", value: "Maple" }],
+      faq: [{ question: "Vem com lixa?", answer: "Sim" }],
+      location: null,
+    });
+  });
+
+  it("recusa tipo desconhecido e ficha grande demais", async () => {
+    loggedAs({ role: "ADMIN" });
+    const details = Array.from({ length: 16 }, (_, i) => ({ label: `d${i}`, value: "x" }));
+
+    const res = await request(app).post("/api/admin/products").set(bearer).send({ ...newProduct, category: "BONE", details });
+
+    expect(res.status).toBe(400);
+    expect(res.body.details.map((d: { field: string }) => d.field).sort()).toEqual(["category", "details"]);
+  });
+
+  it("lista por ids e recusa id inválido na lista", async () => {
+    prisma.product.findMany.mockResolvedValue([]);
+    prisma.product.count.mockResolvedValue(0);
+    expect((await request(app).get(`/api/products?ids=${PRODUCT_ID}`)).status).toBe(200);
+    expect((await request(app).get("/api/products?ids=abc")).status).toBe(400);
+  });
+
+  it("relacionados são públicos", async () => {
+    prisma.product.findUnique.mockResolvedValue({ category: "OUTRO", brandId: BRAND_ID, active: true });
+    prisma.product.findMany.mockResolvedValue([]);
+    expect((await request(app).get(`/api/products/${PRODUCT_ID}/related`)).status).toBe(200);
+  });
+
   it("o administrador vê produto desativado", async () => {
     loggedAs({ role: "ADMIN" });
     prisma.product.findUnique.mockResolvedValue({ ...product, active: false });

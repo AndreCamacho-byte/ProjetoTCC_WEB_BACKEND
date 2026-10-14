@@ -138,6 +138,59 @@ describe("catálogo", () => {
     expect(prisma.product.findMany.mock.calls[0][0].where).not.toHaveProperty("active");
   });
 
+  it("devolve tipo, ficha e perguntas, ignorando itens fora do formato", async () => {
+    prisma.product.findUnique.mockResolvedValue(
+      makeProduct({
+        category: "SHAPE",
+        details: [{ label: "Madeira", value: "Maple" }, { label: 3 }, "lixo"],
+        faq: [{ question: "Vem com lixa?", answer: "Sim" }],
+        location: "Santa Cecília, São Paulo",
+      }),
+    );
+
+    const product = await catalog.getProduct(PRODUCT_ID);
+
+    expect(product).toMatchObject({
+      category: "SHAPE",
+      details: [{ label: "Madeira", value: "Maple" }],
+      faq: [{ question: "Vem com lixa?", answer: "Sim" }],
+      location: "Santa Cecília, São Paulo",
+    });
+  });
+
+  it("produto antigo (sem ficha) devolve listas vazias", async () => {
+    prisma.product.findUnique.mockResolvedValue(makeProduct());
+    expect(await catalog.getProduct(PRODUCT_ID)).toMatchObject({ details: [], faq: [] });
+  });
+
+  it("filtra por tipo e devolve os ids na ordem pedida (últimas visitas)", async () => {
+    prisma.product.findMany.mockResolvedValue([makeProduct({ id: "a" }), makeProduct({ id: "b" })]);
+    prisma.product.count.mockResolvedValue(2);
+
+    const result = await catalog.listProducts({ ids: ["b", "a"], category: "ROUPA", page: 1, pageSize: 12 });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where).toMatchObject({ id: { in: ["b", "a"] }, category: "ROUPA" });
+    expect(result.products.map((p) => p.id)).toEqual(["b", "a"]);
+  });
+
+  it("relacionados: mesmo tipo primeiro, depois a mesma marca, sem o próprio", async () => {
+    prisma.product.findUnique.mockResolvedValue({ category: "SHAPE", brandId: BRAND_ID, active: true });
+    prisma.product.findMany.mockResolvedValue([
+      makeProduct({ id: "mesma-marca", category: "ROUPA" }),
+      makeProduct({ id: "mesmo-tipo", category: "SHAPE" }),
+    ]);
+
+    const related = await catalog.listRelated(PRODUCT_ID);
+
+    expect(prisma.product.findMany.mock.calls[0][0].where).toMatchObject({ active: true, id: { not: PRODUCT_ID } });
+    expect(related.map((p) => p.id)).toEqual(["mesmo-tipo", "mesma-marca"]);
+  });
+
+  it("relacionados de produto desativado dá 404", async () => {
+    prisma.product.findUnique.mockResolvedValue({ category: "SHAPE", brandId: BRAND_ID, active: false });
+    await expect(catalog.listRelated(PRODUCT_ID)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
   it("responde 404 para foto que não existe", async () => {
     prisma.productImage.findUnique.mockResolvedValue(null);
     await expect(catalog.getProductImage(IMAGE_ID)).rejects.toMatchObject({ statusCode: 404 });

@@ -20,6 +20,23 @@ const buyer = [requireAuth, requireMinAge];
  *         description: { type: string }
  *         price: { type: number, example: 119.9 }
  *         active: { type: boolean, description: Produtos desativados não aparecem na loja }
+ *         category: { type: string, enum: [ROUPA, CALCADO, SHAPE, SKATE_MONTADO, PECAS, ACESSORIO, OUTRO] }
+ *         details:
+ *           type: array
+ *           description: Ficha de detalhes (ex.: Madeira, Estado, Rodas)
+ *           items:
+ *             type: object
+ *             properties:
+ *               label: { type: string, example: Madeira }
+ *               value: { type: string, example: Maple canadense, 7 lâminas }
+ *         faq:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               question: { type: string, example: Vem com lixa? }
+ *               answer: { type: string, example: Sim, já aplicada. }
+ *         location: { type: string, nullable: true, example: 'Santa Cecília, São Paulo' }
  *         brand:
  *           type: object
  *           properties:
@@ -34,7 +51,7 @@ const buyer = [requireAuth, requireMinAge];
  *               url: { type: string, example: /api/products/images/3f2b... }
  *         variants:
  *           type: array
- *           description: Tamanhos, cada um com o seu estoque
+ *           description: Tamanhos, cada um com o seu estoque. Produto sem tamanho tem um só, chamado "Único".
  *           items:
  *             type: object
  *             properties:
@@ -116,6 +133,13 @@ const buyer = [requireAuth, requireMinAge];
  *         name: brandId
  *         schema: { type: string, format: uuid }
  *       - in: query
+ *         name: category
+ *         schema: { type: string, enum: [ROUPA, CALCADO, SHAPE, SKATE_MONTADO, PECAS, ACESSORIO, OUTRO] }
+ *       - in: query
+ *         name: ids
+ *         schema: { type: string }
+ *         description: Até 12 ids separados por vírgula; os produtos voltam nessa ordem (usado nas últimas visitas)
+ *       - in: query
  *         name: page
  *         schema: { type: integer, minimum: 1, default: 1 }
  *       - in: query
@@ -188,6 +212,33 @@ marketRoutes.get("/products/images/:imageId", market.getProductImage);
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 marketRoutes.get("/products/:id", market.getProduct);
+
+/**
+ * @openapi
+ * /products/{id}/related:
+ *   get:
+ *     tags: [Marketplace]
+ *     summary: Produtos relacionados (mesmo tipo primeiro, depois a mesma marca)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Até 8 produtos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Product' }
+ *       404:
+ *         description: Produto não encontrado ou desativado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+marketRoutes.get("/products/:id/related", market.listRelated);
 
 /**
  * @openapi

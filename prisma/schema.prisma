@@ -240,22 +240,41 @@ model Brand {
   @@map("brands")
 }
 
+// Tipo do produto: decide quais detalhes aparecem na ficha (ex.: shape tem madeira e estado)
+enum ProductCategory {
+  ROUPA
+  CALCADO
+  SHAPE
+  SKATE_MONTADO
+  PECAS
+  ACESSORIO
+  OUTRO
+}
+
 model Product {
-  id          String   @id @default(uuid())
+  id          String          @id @default(uuid())
   name        String
   description String
-  price       Decimal  @db.Decimal(10, 2)
-  active      Boolean  @default(true)
+  price       Decimal         @db.Decimal(10, 2)
+  active      Boolean         @default(true)
+  category    ProductCategory @default(OUTRO)
+  // Ficha de detalhes: lista de { label, value } (ex.: { "label": "Madeira", "value": "Maple canadense" })
+  details     Json            @default("[]")
+  // Perguntas frequentes do produto: lista de { question, answer }
+  faq         Json            @default("[]")
+  // Onde o produto está (bairro, cidade), mostrado no anúncio. Opcional.
+  location    String?
   brandId     String
-  brand       Brand    @relation(fields: [brandId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  brand       Brand           @relation(fields: [brandId], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   variants ProductVariant[]
   images   ProductImage[]
   savedBy  SavedProduct[]
 
   @@index([brandId])
+  @@index([category])
   @@map("products")
 }
 

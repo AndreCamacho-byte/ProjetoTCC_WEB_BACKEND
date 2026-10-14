@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type ProductCategory } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { TX_OPTIONS, prisma } from "../lib/prisma";
 import { imageUrl, productInclude, toProductView } from "./catalog.service";
@@ -16,6 +16,10 @@ type ProductInput = {
   price: number;
   brandId: string;
   active?: boolean;
+  category?: ProductCategory;
+  details?: { label: string; value: string }[];
+  faq?: { question: string; answer: string }[];
+  location?: string | null;
   variants: VariantInput[];
 };
 

@@ -124,9 +124,28 @@ adminMarketRoutes.delete("/admin/brands/:id", market.deleteBrand);
  *               price: { type: number, example: 119.9 }
  *               brandId: { type: string, format: uuid }
  *               active: { type: boolean, default: true }
+ *               category: { type: string, enum: [ROUPA, CALCADO, SHAPE, SKATE_MONTADO, PECAS, ACESSORIO, OUTRO], default: OUTRO }
+ *               details:
+ *                 type: array
+ *                 maxItems: 15
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     label: { type: string, example: Madeira }
+ *                     value: { type: string, example: Maple canadense }
+ *               faq:
+ *                 type: array
+ *                 maxItems: 10
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     question: { type: string }
+ *                     answer: { type: string }
+ *               location: { type: string, nullable: true, example: 'Santa Cecília, São Paulo' }
  *               variants:
  *                 type: array
  *                 minItems: 1
+ *                 description: Tamanhos com estoque. Produto sem tamanho usa um só, com size "Único".
  *                 items:
  *                   type: object
  *                   required: [size, stock]

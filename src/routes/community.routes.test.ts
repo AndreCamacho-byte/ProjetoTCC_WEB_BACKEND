@@ -205,6 +205,47 @@ describe("produtos salvos", () => {
   });
 });
 
+describe("chat", () => {
+  const CHAT = "55555555-5555-4555-8555-555555555555";
+  const routes = [
+    ["get", "/api/friends"],
+    ["get", "/api/chats"],
+    ["post", "/api/chats"],
+    ["get", "/api/chats/unread-count"],
+    ["post", "/api/chats/share"],
+    ["get", `/api/chats/${CHAT}`],
+    ["get", `/api/chats/${CHAT}/messages`],
+    ["post", `/api/chats/${CHAT}/messages`],
+    ["put", `/api/chats/${CHAT}/read`],
+  ] as const;
+
+  it.each(routes)("%s %s exige login", async (method, path) => {
+    expect((await request(app)[method](path)).status).toBe(401);
+  });
+
+  it("mensagem longa demais é recusada", async () => {
+    loggedAs();
+    const res = await request(app).post(`/api/chats/${CHAT}/messages`).set(bearer).send({ content: "a".repeat(1001) });
+    expect(res.status).toBe(400);
+    expect(prisma.message.create).not.toHaveBeenCalled();
+  });
+
+  it("compartilhar com mais de 10 amigos de uma vez é recusado", async () => {
+    loggedAs();
+    const usernames = Array.from({ length: 11 }, (_, i) => `amigo${i}`);
+    const res = await request(app).post("/api/chats/share").set(bearer).send({ postId: POST_ID, usernames });
+    expect(res.status).toBe(400);
+  });
+
+  it("o contador de não lidas não é confundido com o id de uma conversa", async () => {
+    loggedAs();
+    prisma.conversation.findMany.mockResolvedValue([]);
+    const res = await request(app).get("/api/chats/unread-count").set(bearer);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ count: 0 });
+  });
+});
+
 describe("conta suspensa", () => {
   it("perde o acesso na hora", async () => {
     loggedAs({ suspendedAt: new Date() });

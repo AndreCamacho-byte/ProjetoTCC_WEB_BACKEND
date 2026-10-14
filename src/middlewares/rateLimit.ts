@@ -99,6 +99,13 @@ export const limits = {
     key: (req) => req.userId ?? clientIp(req),
     message: "Você postou muitas vezes seguidas. Espere um pouco antes de postar de novo.",
   }),
+  messaging: rateLimit({
+    name: "messaging",
+    windowMs: 60 * MINUTE,
+    max: 300,
+    key: (req) => req.userId ?? clientIp(req),
+    message: "Você mandou muitas mensagens seguidas. Espere um pouco antes de mandar de novo.",
+  }),
   commenting: rateLimit({
     name: "commenting",
     windowMs: 60 * MINUTE,

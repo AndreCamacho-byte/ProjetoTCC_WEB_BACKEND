@@ -105,6 +105,18 @@ export const prisma = {
     upsert: vi.fn(),
     deleteMany: vi.fn(),
   },
+  conversation: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    update: vi.fn(),
+  },
+  message: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+  },
   follow: {
     findMany: vi.fn(),
     count: vi.fn(),

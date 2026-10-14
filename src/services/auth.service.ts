@@ -8,6 +8,7 @@ import { verifyEmailTemplate } from "../emails/verifyEmail";
 import { AppError } from "../errors/AppError";
 import { sendMail } from "../lib/mail";
 import { prisma } from "../lib/prisma";
+import { SUSPENDED_MESSAGE } from "../middlewares/auth";
 
 type RegisterInput = { name: string; email: string; password: string; birthDate: Date };
 type LoginInput = { email: string; password: string };
@@ -47,7 +48,7 @@ async function generateUsername(email: string) {
 // ---------- Administradores ----------
 
 // Emails de administrador definidos na variável ADMIN_EMAILS (separados por vírgula)
-const adminEmails = new Set(
+export const adminEmails = new Set(
   (env.ADMIN_EMAILS ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
@@ -264,6 +265,10 @@ export async function login({ email, password }: LoginInput) {
 
   if (!user.emailVerifiedAt) {
     throw new AppError("Confirme seu email antes de entrar.", 403, "EMAIL_NOT_VERIFIED");
+  }
+
+  if (user.suspendedAt) {
+    throw new AppError(SUSPENDED_MESSAGE, 403, "ACCOUNT_SUSPENDED");
   }
 
   return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };

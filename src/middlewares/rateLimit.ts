@@ -91,4 +91,19 @@ export const limits = {
     key: () => "site-inteiro",
     message: "O limite diário de envio de emails foi atingido. Tente de novo amanhã.",
   }),
+  // Comunidade: contados por conta (use depois do requireAuth), para frear quem tenta inundar o feed
+  posting: rateLimit({
+    name: "posting",
+    windowMs: 60 * MINUTE,
+    max: 30,
+    key: (req) => req.userId ?? clientIp(req),
+    message: "Você postou muitas vezes seguidas. Espere um pouco antes de postar de novo.",
+  }),
+  commenting: rateLimit({
+    name: "commenting",
+    windowMs: 60 * MINUTE,
+    max: 120,
+    key: (req) => req.userId ?? clientIp(req),
+    message: "Você comentou muitas vezes seguidas. Espere um pouco antes de comentar de novo.",
+  }),
 };

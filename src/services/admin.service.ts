@@ -1,7 +1,7 @@
 import { Prisma, type UserRole } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
-import { toPublicUser } from "./auth.service";
+import { adminEmails, toPublicUser } from "./auth.service";
 
 type ListUsersInput = { search?: string; page: number; pageSize: number };
 
@@ -11,6 +11,7 @@ type UpdateUserInput = {
   role?: UserRole;
   emailVerified?: boolean;
   birthDate?: Date | null;
+  suspended?: boolean;
 };
 
 export async function listUsers({ search, page, pageSize }: ListUsersInput) {
@@ -42,6 +43,14 @@ export async function updateUser(id: string, adminId: string, data: UpdateUserIn
   if (id === adminId && data.role === "USER") {
     throw new AppError("Você não pode remover a sua própria função de administrador", 400);
   }
+  if (id === adminId && data.suspended) {
+    throw new AppError("Você não pode suspender a sua própria conta", 400);
+  }
+  // Quem está na lista ADMIN_EMAILS voltaria a ser admin no próximo login, então a função
+  // dessas contas só muda tirando o email da lista (na configuração do servidor)
+  if (data.role === "USER" && adminEmails.has(user.email)) {
+    throw new AppError("Esta conta é administradora pela configuração do servidor e não pode ser rebaixada pelo painel", 400);
+  }
 
   if (data.username && data.username !== user.username) {
     const taken = await prisma.user.findUnique({ where: { username: data.username } });
@@ -50,7 +59,7 @@ export async function updateUser(id: string, adminId: string, data: UpdateUserIn
     }
   }
 
-  const { emailVerified, ...fields } = data;
+  const { emailVerified, suspended, ...fields } = data;
   const updated = await prisma.user.update({
     where: { id },
     data: {
@@ -58,6 +67,8 @@ export async function updateUser(id: string, adminId: string, data: UpdateUserIn
       // Só mexe na data se o estado realmente mudar (para não trocar a data de quem já confirmou)
       ...(emailVerified === true && !user.emailVerifiedAt ? { emailVerifiedAt: new Date() } : {}),
       ...(emailVerified === false ? { emailVerifiedAt: null } : {}),
+      ...(suspended === true && !user.suspendedAt ? { suspendedAt: new Date() } : {}),
+      ...(suspended === false ? { suspendedAt: null } : {}),
     },
   });
 

@@ -168,6 +168,14 @@ describe("login", () => {
     });
   });
 
+  it("bloqueia conta suspensa, com a mensagem própria", async () => {
+    prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash, suspendedAt: new Date() }));
+    await expect(auth.login({ email: "tony@clutch.test", password: "skate1234" })).rejects.toMatchObject({
+      statusCode: 403,
+      code: "ACCOUNT_SUSPENDED",
+    });
+  });
+
   it("devolve o usuário sem a senha e um token válido", async () => {
     prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
 

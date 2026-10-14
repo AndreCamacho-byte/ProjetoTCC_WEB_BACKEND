@@ -60,7 +60,7 @@ adminRoutes.get("/admin/users", adminController.listUsers);
  *   patch:
  *     tags: [Admin]
  *     summary: Edita um usuário
- *     description: Envie só os campos que quer alterar. Um administrador não pode tirar a própria função de admin.
+ *     description: Envie só os campos que quer alterar. Um administrador não pode tirar a própria função de admin nem suspender a si mesmo. Contas da lista ADMIN_EMAILS não podem ser rebaixadas pelo painel.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -80,6 +80,7 @@ adminRoutes.get("/admin/users", adminController.listUsers);
  *               role: { type: string, enum: [USER, ADMIN] }
  *               emailVerified: { type: boolean, description: Marca ou desmarca o email como confirmado }
  *               birthDate: { type: string, format: date, nullable: true, example: '2005-05-12', description: Corrige a data de nascimento (null apaga) }
+ *               suspended: { type: boolean, description: Suspende (true) ou libera (false) a conta. A conta suspensa não entra no site e some da comunidade. }
  *     responses:
  *       200:
  *         description: Usuário atualizado

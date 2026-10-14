@@ -14,6 +14,14 @@ const profileSchema = z
       .trim()
       .toLowerCase()
       .regex(/^[a-z0-9_]{3,20}$/, "Use de 3 a 20 letras minúsculas, números ou _"),
+    // Texto vazio apaga a bio
+    bio: z
+      .string()
+      .trim()
+      .max(160, "A bio pode ter até 160 caracteres")
+      .nullable()
+      .transform((value) => value || null),
+    skateLevel: z.enum(["INICIANTE", "INTERMEDIARIO", "AVANCADO", "PROFISSIONAL"]).nullable(),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, "Informe pelo menos um campo para alterar");

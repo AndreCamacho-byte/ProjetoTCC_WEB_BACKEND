@@ -95,7 +95,18 @@ export const prisma = {
     create: vi.fn(),
     delete: vi.fn(),
   },
+  savedPost: {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  savedProduct: {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   follow: {
+    findMany: vi.fn(),
     count: vi.fn(),
     upsert: vi.fn(),
     deleteMany: vi.fn(),

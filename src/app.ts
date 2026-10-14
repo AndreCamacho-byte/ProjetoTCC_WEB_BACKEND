@@ -29,6 +29,9 @@ app.use((_req, res, next) => {
 
 app.use(cors({ origin: env.CORS_ORIGIN }));
 // 1mb para caber a foto de perfil (o padrão do Express é 100kb)
+// Um post pode levar até 4 fotos (cada uma com até 600 KB), então só ali o limite é maior.
+// Quem passa por aqui primeiro já fica com o corpo lido, e o limite geral abaixo não roda de novo.
+app.use("/api/posts", express.json({ limit: "4mb" }));
 app.use(express.json({ limit: "1mb" }));
 
 // Prefixo /api: é esse caminho que o Nginx do frontend repassa para o backend na AWS

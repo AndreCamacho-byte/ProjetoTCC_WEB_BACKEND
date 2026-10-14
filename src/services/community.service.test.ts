@@ -22,8 +22,9 @@ function makePost(overrides: Record<string, unknown> = {}) {
     content: "Sessão de hoje",
     authorId: OTHER,
     author: author(),
-    image: null,
+    images: [],
     likes: [],
+    savedBy: [],
     _count: { likes: 4, comments: 2 },
     createdAt: new Date("2026-10-10T12:00:00.000Z"),
     updatedAt: new Date("2026-10-10T12:00:00.000Z"),
@@ -45,8 +46,10 @@ function makeComment(overrides: Record<string, unknown> = {}) {
 }
 
 describe("posts", () => {
-  it("mostra contadores, curtida de quem vê e a foto como endereço", async () => {
-    prisma.post.findFirst.mockResolvedValue(makePost({ likes: [{ userId: ME }], image: { postId: POST_ID } }));
+  it("mostra contadores, curtida e salvo de quem vê e as fotos como endereços", async () => {
+    prisma.post.findFirst.mockResolvedValue(
+      makePost({ likes: [{ userId: ME }], savedBy: [{ userId: ME }], images: [{ id: "foto-1" }, { id: "foto-2" }] }),
+    );
 
     const post = await community.getPost(POST_ID, me);
 
@@ -54,8 +57,9 @@ describe("posts", () => {
       likeCount: 4,
       commentCount: 2,
       likedByMe: true,
+      savedByMe: true,
       canDelete: false,
-      imageUrl: `/api/posts/${POST_ID}/image`,
+      imageUrls: ["/api/posts/images/foto-1", "/api/posts/images/foto-2"],
     });
   });
 
@@ -106,13 +110,23 @@ describe("posts", () => {
     expect(prisma.post.create).not.toHaveBeenCalled();
   });
 
-  it("aceita post só com foto e grava a foto junto", async () => {
-    prisma.post.create.mockResolvedValue(makePost({ authorId: ME, content: "", image: { postId: POST_ID } }));
+  it("aceita post só com fotos e grava as fotos na ordem escolhida", async () => {
+    prisma.post.create.mockResolvedValue(makePost({ authorId: ME, content: "", images: [{ id: "a" }, { id: "b" }] }));
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
 
-    const post = await community.createPost(me, { content: "", image: Buffer.from([0xff, 0xd8, 0xff]) });
+    const post = await community.createPost(me, { content: "", images: [jpeg, jpeg] });
 
-    expect(prisma.post.create.mock.calls[0][0].data).toMatchObject({ authorId: ME, image: { create: {} } });
-    expect(post.imageUrl).toBe(`/api/posts/${POST_ID}/image`);
+    const created = prisma.post.create.mock.calls[0][0].data.images.create;
+    expect(created.map((image: { position: number }) => image.position)).toEqual([0, 1]);
+    expect(post.imageUrls).toHaveLength(2);
+  });
+
+  it("recusa mais de 4 fotos", async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
+    await expect(community.createPost(me, { content: "oi", images: [jpeg, jpeg, jpeg, jpeg, jpeg] })).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    expect(prisma.post.create).not.toHaveBeenCalled();
   });
 
   it("só o autor ou um administrador apagam o post", async () => {
@@ -152,6 +166,39 @@ describe("curtidas", () => {
     prisma.post.findFirst.mockResolvedValue(null);
     await expect(community.likePost(POST_ID, ME)).rejects.toMatchObject({ statusCode: 404 });
     expect(prisma.like.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("salvos", () => {
+  it("salvar duas vezes não duplica", async () => {
+    prisma.post.findFirst.mockResolvedValue({ id: POST_ID });
+
+    expect(await community.savePost(POST_ID, ME)).toEqual({ savedByMe: true });
+    expect(prisma.savedPost.upsert).toHaveBeenCalledWith({
+      where: { userId_postId: { userId: ME, postId: POST_ID } },
+      create: { userId: ME, postId: POST_ID },
+      update: {},
+    });
+  });
+
+  it("não salva post que não existe", async () => {
+    prisma.post.findFirst.mockResolvedValue(null);
+    await expect(community.savePost(POST_ID, ME)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("lista só os salvos de quem está vendo, com cursor", async () => {
+    prisma.savedPost.findMany.mockResolvedValue([
+      { userId: ME, postId: "p1", post: makePost({ id: "p1", savedBy: [{ userId: ME }] }) },
+      { userId: ME, postId: "p2", post: makePost({ id: "p2", savedBy: [{ userId: ME }] }) },
+    ]);
+
+    const page = await community.listSavedPosts(me, { limit: 1, cursor: "p0" });
+
+    const args = prisma.savedPost.findMany.mock.calls[0][0];
+    expect(args.where).toMatchObject({ userId: ME, post: { author: { suspendedAt: null } } });
+    expect(args.cursor).toEqual({ userId_postId: { userId: ME, postId: "p0" } });
+    expect(page).toMatchObject({ nextCursor: "p1" });
+    expect(page.posts[0].savedByMe).toBe(true);
   });
 });
 
@@ -208,6 +255,50 @@ describe("perfis e seguidores", () => {
     prisma.user.findFirst.mockResolvedValue({ ...profile, id: ME });
     await expect(profiles.follow("tony", me)).rejects.toMatchObject({ statusCode: 400 });
     expect(prisma.follow.upsert).not.toHaveBeenCalled();
+  });
+
+  it("diz quando a pessoa segue de volta (amigos)", async () => {
+    prisma.user.findFirst.mockResolvedValue(profile);
+    prisma.follow.count
+      .mockResolvedValueOnce(10)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1);
+    prisma.post.count.mockResolvedValue(0);
+
+    expect(await profiles.getProfile("tony", me)).toMatchObject({ followedByMe: true, followsMe: true });
+  });
+
+  it("lista os seguidores com o botão de seguir de quem vê", async () => {
+    const ana = { ...author("ana-id"), username: "ana" };
+    const bia = { ...author("bia-id"), username: "bia" };
+    prisma.user.findFirst.mockResolvedValue(profile);
+    prisma.follow.findMany
+      .mockResolvedValueOnce([
+        { followerId: "ana-id", followingId: OTHER, follower: ana, following: profile },
+        { followerId: "bia-id", followingId: OTHER, follower: bia, following: profile },
+      ])
+      .mockResolvedValueOnce([{ followingId: "bia-id" }]);
+
+    const result = await profiles.listFollows("tony", "followers", me, { limit: 20 });
+
+    expect(prisma.follow.findMany.mock.calls[0][0].where).toEqual({ followingId: OTHER, follower: { suspendedAt: null } });
+    expect(result.people.map((p) => [p.username, p.followedByMe])).toEqual([
+      ["ana", false],
+      ["bia", true],
+    ]);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it("a lista de quem a pessoa segue usa o outro lado da relação", async () => {
+    prisma.user.findFirst.mockResolvedValue(profile);
+    prisma.follow.findMany.mockResolvedValue([]);
+
+    await profiles.listFollows("tony", "following", me, { limit: 20, cursor: "x" });
+
+    const args = prisma.follow.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({ followerId: OTHER, following: { suspendedAt: null } });
+    expect(args.cursor).toEqual({ followerId_followingId: { followerId: OTHER, followingId: "x" } });
   });
 
   it("seguir duas vezes não dá erro", async () => {

@@ -20,26 +20,31 @@ export const activeAuthor = { author: { suspendedAt: null } } satisfies Prisma.P
 const postInclude = (viewerId: string) =>
   ({
     author: { select: authorSelect },
-    image: { select: { postId: true } },
-    // Só a curtida de quem está vendo, para saber se o coração aparece preenchido
+    images: { select: { id: true }, orderBy: { position: "asc" } },
+    // Só a curtida e o "salvo" de quem está vendo, para saber como os botões aparecem
     likes: { where: { userId: viewerId }, select: { userId: true } },
+    savedBy: { where: { userId: viewerId }, select: { userId: true } },
     _count: { select: { likes: true, comments: { where: { author: { suspendedAt: null } } } } },
   }) satisfies Prisma.PostInclude;
 
 type PostWithRelations = Prisma.PostGetPayload<{ include: ReturnType<typeof postInclude> }>;
 
-export const postImageUrl = (postId: string) => `/api/posts/${postId}/image`;
+// No máximo 4 fotos por post
+export const MAX_POST_IMAGES = 4;
+
+export const postImageUrl = (imageId: string) => `/api/posts/images/${imageId}`;
 
 export function toPostView(post: PostWithRelations, viewer: Viewer) {
   return {
     id: post.id,
     content: post.content,
-    imageUrl: post.image ? postImageUrl(post.id) : null,
+    imageUrls: post.images.map((image) => postImageUrl(image.id)),
     createdAt: post.createdAt,
     author: post.author,
     likeCount: post._count.likes,
     commentCount: post._count.comments,
     likedByMe: post.likes.length > 0,
+    savedByMe: post.savedBy.length > 0,
     // O site mostra o botão de apagar só para quem pode
     canDelete: viewer.isAdmin || post.authorId === viewer.id,
   };
@@ -94,16 +99,22 @@ export async function getPost(postId: string, viewer: Viewer) {
   return toPostView(post, viewer);
 }
 
-export async function createPost(viewer: Viewer, { content, image }: { content: string; image?: Buffer }) {
-  if (!content && !image) {
+export async function createPost(viewer: Viewer, { content, images = [] }: { content: string; images?: Buffer[] }) {
+  if (!content && images.length === 0) {
     throw new AppError("Escreva alguma coisa ou escolha uma foto", 400);
+  }
+  if (images.length > MAX_POST_IMAGES) {
+    throw new AppError(`Escolha no máximo ${MAX_POST_IMAGES} fotos por post`, 400);
   }
 
   const post = await prisma.post.create({
     data: {
       content,
       authorId: viewer.id,
-      ...(image ? { image: { create: { data: new Uint8Array(image) } } } : {}),
+      // As fotos ficam na ordem em que a pessoa escolheu
+      ...(images.length > 0
+        ? { images: { create: images.map((image, position) => ({ data: new Uint8Array(image), position })) } }
+        : {}),
     },
     include: postInclude(viewer.id),
   });
@@ -119,8 +130,8 @@ export async function deletePost(postId: string, viewer: Viewer) {
   await prisma.post.delete({ where: { id: postId } });
 }
 
-export async function getPostImage(postId: string) {
-  const image = await prisma.postImage.findUnique({ where: { postId } });
+export async function getPostImage(imageId: string) {
+  const image = await prisma.postImage.findUnique({ where: { id: imageId } });
   if (!image) {
     throw new AppError("Imagem não encontrada", 404);
   }
@@ -159,6 +170,43 @@ export async function unlikePost(postId: string, userId: string) {
   await assertPostVisible(postId);
   await prisma.like.deleteMany({ where: { postId, userId } });
   return likeState(postId, userId);
+}
+
+// ---------- Salvos ----------
+
+// Salvar duas vezes não dá erro (o par pessoa + post é único)
+export async function savePost(postId: string, userId: string) {
+  await assertPostVisible(postId);
+  await prisma.savedPost.upsert({
+    where: { userId_postId: { userId, postId } },
+    create: { userId, postId },
+    update: {},
+  });
+  return { savedByMe: true };
+}
+
+export async function unsavePost(postId: string, userId: string) {
+  await prisma.savedPost.deleteMany({ where: { userId, postId } });
+  return { savedByMe: false };
+}
+
+// Posts que a pessoa salvou, do mais recente salvo para o mais antigo
+export async function listSavedPosts(viewer: Viewer, { cursor, limit }: ListInput) {
+  const saved = await prisma.savedPost.findMany({
+    where: { userId: viewer.id, post: activeAuthor },
+    include: { post: { include: postInclude(viewer.id) } },
+    orderBy: [{ createdAt: "desc" }, { postId: "desc" }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { userId_postId: { userId: viewer.id, postId: cursor } }, skip: 1 } : {}),
+  });
+
+  const hasMore = saved.length > limit;
+  const page = hasMore ? saved.slice(0, limit) : saved;
+
+  return {
+    posts: page.map((item) => toPostView(item.post, viewer)),
+    nextCursor: hasMore ? page[page.length - 1].postId : null,
+  };
 }
 
 // ---------- Comentários ----------

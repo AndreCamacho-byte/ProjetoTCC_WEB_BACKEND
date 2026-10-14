@@ -305,7 +305,7 @@ adminMarketRoutes.post("/admin/products/:id/images", market.addProductImage);
  *         name: page
  *         schema: { type: integer, minimum: 1, default: 1 }
  *     responses:
- *       200: { description: Página de pedidos, cada um com o nome e o email do cliente }
+ *       200: { description: Página de pedidos, cada um com o nome e o @ do cliente }
  */
 adminMarketRoutes.get("/admin/orders", market.listAllOrders);
 

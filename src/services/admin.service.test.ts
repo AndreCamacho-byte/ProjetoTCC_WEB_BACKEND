@@ -21,6 +21,9 @@ describe("listUsers", () => {
     expect(result).toMatchObject({ total: 41, page: 1, pageSize: 20 });
     expect(result.users).toHaveLength(1);
     expect(result.users[0]).not.toHaveProperty("passwordHash");
+    // O painel mostra o @, nunca o email
+    expect(result.users[0]).not.toHaveProperty("email");
+    expect(result.users[0]).toHaveProperty("username");
   });
 
   it("pula os registros das páginas anteriores, dos mais novos para os mais antigos", async () => {

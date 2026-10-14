@@ -214,6 +214,71 @@ marketRoutes.get("/brands", market.listBrands);
 
 /**
  * @openapi
+ * /products/{id}/save:
+ *   put:
+ *     tags: [Marketplace]
+ *     summary: Salva um produto para ver depois
+ *     description: Exige login e 12 anos ou mais. Salvar de novo não dá erro.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Produto salvo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 savedByMe: { type: boolean, example: true }
+ *       404:
+ *         description: Produto não encontrado ou fora da loja
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *   delete:
+ *     tags: [Marketplace]
+ *     summary: Tira o produto dos salvos
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Produto fora dos salvos
+ */
+marketRoutes.put("/products/:id/save", buyer, market.saveProduct);
+marketRoutes.delete("/products/:id/save", buyer, market.unsaveProduct);
+
+/**
+ * @openapi
+ * /saved/products:
+ *   get:
+ *     tags: [Marketplace]
+ *     summary: Produtos que você salvou e que ainda estão na loja
+ *     description: Exige login e 12 anos ou mais.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Até 100 produtos, os salvos por último primeiro
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Product' }
+ */
+marketRoutes.get("/saved/products", buyer, market.listSavedProducts);
+
+/**
+ * @openapi
  * /cart:
  *   get:
  *     tags: [Marketplace]

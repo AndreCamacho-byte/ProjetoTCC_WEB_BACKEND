@@ -21,9 +21,18 @@ const pageQuery = z.object({
 
 const feedQuery = pageQuery.extend({ feed: z.enum(["all", "following"]).default("all") });
 
+// Nas listas de seguidores o cursor é o id da última pessoa já recebida
+const followQuery = z.object({
+  cursor: z.uuid("Cursor inválido").optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 const postSchema = z.object({
   content: z.string().trim().max(MAX_POST_LENGTH, `O post pode ter até ${MAX_POST_LENGTH} caracteres`).default(""),
-  image: jpegDataUrl.optional(),
+  images: z
+    .array(jpegDataUrl)
+    .max(community.MAX_POST_IMAGES, `Escolha no máximo ${community.MAX_POST_IMAGES} fotos por post`)
+    .default([]),
 });
 
 const commentSchema = z.object({
@@ -46,9 +55,9 @@ export async function getPost(req: Request, res: Response) {
 }
 
 export async function createPost(req: Request, res: Response) {
-  const { content, image } = postSchema.parse(req.body);
-  const data = image ? jpegFromDataUrl(image, MAX_POST_IMAGE_BYTES) : undefined;
-  res.status(201).json(await community.createPost(viewerOf(req), { content, image: data }));
+  const { content, images } = postSchema.parse(req.body);
+  const data = images.map((image) => jpegFromDataUrl(image, MAX_POST_IMAGE_BYTES));
+  res.status(201).json(await community.createPost(viewerOf(req), { content, images: data }));
 }
 
 export async function deletePost(req: Request, res: Response) {
@@ -58,8 +67,8 @@ export async function deletePost(req: Request, res: Response) {
 }
 
 export async function getPostImage(req: Request, res: Response) {
-  const { id } = idParam("id").parse(req.params);
-  const image = await community.getPostImage(id);
+  const { imageId } = idParam("imageId").parse(req.params);
+  const image = await community.getPostImage(imageId);
   res.set({
     "Content-Type": "image/jpeg",
     // A foto de um post nunca muda (só some junto com o post)
@@ -76,6 +85,22 @@ export async function likePost(req: Request, res: Response) {
 export async function unlikePost(req: Request, res: Response) {
   const { id } = idParam("id").parse(req.params);
   res.json(await community.unlikePost(id, req.userId!));
+}
+
+// ---------- Salvos ----------
+
+export async function savePost(req: Request, res: Response) {
+  const { id } = idParam("id").parse(req.params);
+  res.json(await community.savePost(id, req.userId!));
+}
+
+export async function unsavePost(req: Request, res: Response) {
+  const { id } = idParam("id").parse(req.params);
+  res.json(await community.unsavePost(id, req.userId!));
+}
+
+export async function listSavedPosts(req: Request, res: Response) {
+  res.json(await community.listSavedPosts(viewerOf(req), pageQuery.parse(req.query)));
 }
 
 // ---------- Comentários ----------
@@ -113,6 +138,16 @@ export async function getProfilePosts(req: Request, res: Response) {
   const { username } = usernameParam.parse(req.params);
   const authorId = await profiles.getProfileId(username);
   res.json(await community.getPostsByAuthor(authorId, viewerOf(req), pageQuery.parse(req.query)));
+}
+
+export async function listFollowers(req: Request, res: Response) {
+  const { username } = usernameParam.parse(req.params);
+  res.json(await profiles.listFollows(username, "followers", viewerOf(req), followQuery.parse(req.query)));
+}
+
+export async function listFollowing(req: Request, res: Response) {
+  const { username } = usernameParam.parse(req.params);
+  res.json(await profiles.listFollows(username, "following", viewerOf(req), followQuery.parse(req.query)));
 }
 
 export async function follow(req: Request, res: Response) {

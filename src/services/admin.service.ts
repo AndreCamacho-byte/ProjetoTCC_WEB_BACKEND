@@ -1,7 +1,14 @@
-import { Prisma, type UserRole } from "@prisma/client";
+import { Prisma, type User, type UserRole } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
 import { adminEmails, toPublicUser } from "./auth.service";
+
+// O painel mostra as pessoas pelo nome e pelo @: o email não sai do servidor
+// (a busca por email continua funcionando, só não é exibido)
+export function toAdminUser(user: User) {
+  const { email: _, ...rest } = toPublicUser(user);
+  return rest;
+}
 
 type ListUsersInput = { search?: string; page: number; pageSize: number };
 
@@ -30,7 +37,7 @@ export async function listUsers({ search, page, pageSize }: ListUsersInput) {
     prisma.user.count({ where }),
   ]);
 
-  return { users: users.map(toPublicUser), total, page, pageSize };
+  return { users: users.map(toAdminUser), total, page, pageSize };
 }
 
 export async function updateUser(id: string, adminId: string, data: UpdateUserInput) {
@@ -72,7 +79,7 @@ export async function updateUser(id: string, adminId: string, data: UpdateUserIn
     },
   });
 
-  return toPublicUser(updated);
+  return toAdminUser(updated);
 }
 
 export async function deleteUser(id: string, adminId: string) {

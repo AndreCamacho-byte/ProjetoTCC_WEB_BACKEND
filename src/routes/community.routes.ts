@@ -24,12 +24,16 @@ export const communityRoutes = Router();
  *       properties:
  *         id: { type: string, format: uuid }
  *         content: { type: string, example: Sessão de hoje na praça! }
- *         imageUrl: { type: string, nullable: true, example: /api/posts/3f2b.../image }
+ *         imageUrls:
+ *           type: array
+ *           description: Até 4 fotos, na ordem escolhida
+ *           items: { type: string, example: /api/posts/images/3f2b... }
  *         createdAt: { type: string, format: date-time }
  *         author: { $ref: '#/components/schemas/Author' }
  *         likeCount: { type: integer, example: 12 }
  *         commentCount: { type: integer, example: 3 }
  *         likedByMe: { type: boolean }
+ *         savedByMe: { type: boolean, description: Se quem está vendo salvou o post }
  *         canDelete: { type: boolean, description: Verdadeiro para o autor e para administradores }
  *     PostPage:
  *       type: object
@@ -57,19 +61,20 @@ export const communityRoutes = Router();
  *             following: { type: integer }
  *             posts: { type: integer }
  *             followedByMe: { type: boolean }
+ *             followsMe: { type: boolean, description: A pessoa segue quem está vendo. Os dois verdadeiros = amigos. }
  *             isMe: { type: boolean }
  */
 
 /**
  * @openapi
- * /posts/{id}/image:
+ * /posts/images/{imageId}:
  *   get:
  *     tags: [Posts]
- *     summary: Devolve a foto de um post
+ *     summary: Devolve uma foto de post
  *     description: Rota pública, usada no atributo src das imagens.
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: imageId
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
@@ -84,7 +89,7 @@ export const communityRoutes = Router();
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-communityRoutes.get("/posts/:id/image", community.getPostImage);
+communityRoutes.get("/posts/images/:imageId", community.getPostImage);
 
 /**
  * @openapi
@@ -121,7 +126,7 @@ communityRoutes.get("/posts/:id/image", community.getPostImage);
  *   post:
  *     tags: [Posts]
  *     summary: Publica um post
- *     description: Texto de até 500 caracteres e, se quiser, uma foto (JPEG em data URL, até 600 KB). Precisa de pelo menos um dos dois. Limite de 30 posts por hora.
+ *     description: Texto de até 500 caracteres e, se quiser, até 4 fotos (JPEG em data URL, até 600 KB cada). Precisa de texto ou de pelo menos uma foto. Limite de 30 posts por hora.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -132,7 +137,10 @@ communityRoutes.get("/posts/:id/image", community.getPostImage);
  *             type: object
  *             properties:
  *               content: { type: string, maxLength: 500, example: Sessão de hoje na praça! }
- *               image: { type: string, example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...' }
+ *               images:
+ *                 type: array
+ *                 maxItems: 4
+ *                 items: { type: string, example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...' }
  *     responses:
  *       201:
  *         description: Post criado
@@ -140,7 +148,7 @@ communityRoutes.get("/posts/:id/image", community.getPostImage);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Post' }
  *       400:
- *         description: Post vazio, texto longo demais ou arquivo que não é JPEG
+ *         description: Post vazio, texto longo demais, mais de 4 fotos ou arquivo que não é JPEG
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -245,6 +253,76 @@ communityRoutes.delete("/posts/:id", requireAuth, community.deletePost);
  */
 communityRoutes.put("/posts/:id/like", requireAuth, community.likePost);
 communityRoutes.delete("/posts/:id/like", requireAuth, community.unlikePost);
+
+/**
+ * @openapi
+ * /posts/{id}/save:
+ *   put:
+ *     tags: [Posts]
+ *     summary: Salva um post para ver depois
+ *     description: Salvar de novo não dá erro. Só quem salvou vê a lista de salvos.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Post salvo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 savedByMe: { type: boolean, example: true }
+ *       404:
+ *         description: Post não encontrado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *   delete:
+ *     tags: [Posts]
+ *     summary: Tira o post dos salvos
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Post fora dos salvos
+ */
+communityRoutes.put("/posts/:id/save", requireAuth, community.savePost);
+communityRoutes.delete("/posts/:id/save", requireAuth, community.unsavePost);
+
+/**
+ * @openapi
+ * /saved/posts:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Posts que você salvou (os salvos por último primeiro)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string, format: uuid }
+ *         description: Id do último post já recebido
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Uma página de posts salvos
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/PostPage' }
+ */
+communityRoutes.get("/saved/posts", requireAuth, community.listSavedPosts);
 
 /**
  * @openapi
@@ -454,5 +532,67 @@ communityRoutes.get("/profiles/:username/posts", requireAuth, community.getProfi
  *       200:
  *         description: Situação atual
  */
+/**
+ * @openapi
+ * /profiles/{username}/followers:
+ *   get:
+ *     tags: [Users]
+ *     summary: Quem segue a pessoa (os mais recentes primeiro)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: username
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string, format: uuid }
+ *         description: Id da última pessoa já recebida
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Uma página de pessoas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 people:
+ *                   type: array
+ *                   items:
+ *                     allOf:
+ *                       - $ref: '#/components/schemas/Author'
+ *                       - type: object
+ *                         properties:
+ *                           followedByMe: { type: boolean }
+ *                           isMe: { type: boolean }
+ *                 nextCursor: { type: string, nullable: true }
+ * /profiles/{username}/following:
+ *   get:
+ *     tags: [Users]
+ *     summary: Quem a pessoa segue (os mais recentes primeiro)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: username
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Uma página de pessoas (mesmo formato da lista de seguidores)
+ */
+communityRoutes.get("/profiles/:username/followers", requireAuth, community.listFollowers);
+communityRoutes.get("/profiles/:username/following", requireAuth, community.listFollowing);
+
 communityRoutes.put("/profiles/:username/follow", requireAuth, community.follow);
 communityRoutes.delete("/profiles/:username/follow", requireAuth, community.unfollow);

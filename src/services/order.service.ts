@@ -147,7 +147,7 @@ export async function listAllOrders({ status, page, pageSize }: { status?: Order
   const [orders, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,
-      include: { items: true, user: { select: { name: true, email: true } } },
+      include: { items: true, user: { select: { name: true, username: true } } },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,

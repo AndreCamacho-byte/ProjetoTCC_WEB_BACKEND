@@ -49,6 +49,20 @@ export async function getProductImage(req: Request, res: Response) {
   res.send(image);
 }
 
+export async function saveProduct(req: Request, res: Response) {
+  const { id } = idParam("id").parse(req.params);
+  res.json(await catalog.saveProduct(id, req.userId!));
+}
+
+export async function unsaveProduct(req: Request, res: Response) {
+  const { id } = idParam("id").parse(req.params);
+  res.json(await catalog.unsaveProduct(id, req.userId!));
+}
+
+export async function listSavedProducts(req: Request, res: Response) {
+  res.json(await catalog.listSavedProducts(req.userId!));
+}
+
 // ---------- Carrinho ----------
 
 const cartItemSchema = z.object({

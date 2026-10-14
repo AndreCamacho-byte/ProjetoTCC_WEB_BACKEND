@@ -63,6 +63,8 @@ model User {
   participations      MeetupParticipant[]
   cartItems           CartItem[]
   orders              Order[]
+  savedPosts          SavedPost[]
+  savedProducts       SavedProduct[]
 
   @@map("users")
 }
@@ -125,21 +127,52 @@ model Post {
 
   comments Comment[]
   likes    Like[]
-  image    PostImage?
+  images   PostImage[]
+  savedBy  SavedPost[]
 
   @@index([authorId, createdAt])
   @@index([createdAt])
   @@map("posts")
 }
 
-// Foto de um post, guardada no banco como a foto de perfil (no máximo uma por post)
+// Fotos de um post (até 4), guardadas no banco como a foto de perfil
 model PostImage {
-  postId    String   @id
+  id        String   @id @default(uuid())
+  postId    String
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   data      Bytes
+  // Ordem em que a pessoa escolheu as fotos
+  position  Int      @default(0)
   createdAt DateTime @default(now())
 
+  @@index([postId, position])
   @@map("post_images")
+}
+
+// Posts que a pessoa guardou para ver depois
+model SavedPost {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, postId])
+  @@index([userId, createdAt])
+  @@map("saved_posts")
+}
+
+// Produtos da loja que a pessoa guardou
+model SavedProduct {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, productId])
+  @@index([userId, createdAt])
+  @@map("saved_products")
 }
 
 model Comment {
@@ -216,6 +249,7 @@ model Product {
 
   variants ProductVariant[]
   images   ProductImage[]
+  savedBy  SavedProduct[]
 
   @@index([brandId])
   @@map("products")

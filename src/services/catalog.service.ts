@@ -93,6 +93,37 @@ export async function listBrands() {
   return prisma.brand.findMany({ orderBy: { name: "asc" } });
 }
 
+// ---------- Salvos ----------
+
+export async function saveProduct(productId: string, userId: string) {
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { active: true } });
+  if (!product || !product.active) {
+    throw new AppError("Produto não encontrado", 404);
+  }
+  await prisma.savedProduct.upsert({
+    where: { userId_productId: { userId, productId } },
+    create: { userId, productId },
+    update: {},
+  });
+  return { savedByMe: true };
+}
+
+export async function unsaveProduct(productId: string, userId: string) {
+  await prisma.savedProduct.deleteMany({ where: { userId, productId } });
+  return { savedByMe: false };
+}
+
+// Produtos salvos que ainda estão na loja (os salvos por último primeiro)
+export async function listSavedProducts(userId: string) {
+  const saved = await prisma.savedProduct.findMany({
+    where: { userId, product: { active: true } },
+    include: { product: { include: productInclude } },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return saved.map((item) => toProductView(item.product));
+}
+
 export async function getProductImage(imageId: string) {
   const image = await prisma.productImage.findUnique({ where: { id: imageId } });
   if (!image) {

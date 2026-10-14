@@ -26,8 +26,9 @@ const createdPost = {
   content: "Sessão de hoje",
   authorId: USER_ID,
   author: { id: USER_ID, name: "Tony Teste", username: "tony", avatarUrl: null, skateLevel: null },
-  image: null,
+  images: [],
   likes: [],
+  savedBy: [],
   _count: { likes: 0, comments: 0 },
   createdAt: new Date("2026-10-10T12:00:00.000Z"),
   updatedAt: new Date("2026-10-10T12:00:00.000Z"),
@@ -49,6 +50,10 @@ describe("comunidade exige login", () => {
     ["get", "/api/profiles?search=tony"],
     ["get", "/api/profiles/tony"],
     ["put", "/api/profiles/tony/follow"],
+    ["get", "/api/profiles/tony/followers"],
+    ["get", "/api/profiles/tony/following"],
+    ["put", `/api/posts/${POST_ID}/save`],
+    ["get", "/api/saved/posts"],
   ] as const;
 
   it.each(routes)("%s %s", async (method, path) => {
@@ -56,9 +61,9 @@ describe("comunidade exige login", () => {
   });
 
   it("a foto do post é pública (a tag <img> não manda o token)", async () => {
-    prisma.postImage.findUnique.mockResolvedValue({ postId: POST_ID, data: new Uint8Array([0xff, 0xd8, 0xff]) });
+    prisma.postImage.findUnique.mockResolvedValue({ id: POST_ID, data: new Uint8Array([0xff, 0xd8, 0xff]) });
 
-    const res = await request(app).get(`/api/posts/${POST_ID}/image`);
+    const res = await request(app).get(`/api/posts/images/${POST_ID}`);
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toBe("image/jpeg");
@@ -84,8 +89,29 @@ describe("POST /api/posts", () => {
 
   it("recusa foto que não é JPEG de verdade", async () => {
     loggedAs();
-    const res = await request(app).post("/api/posts").set(bearer).send({ content: "oi", image: jpeg([1, 2, 3]) });
+    const res = await request(app).post("/api/posts").set(bearer).send({ content: "oi", images: [jpeg([1, 2, 3])] });
     expect(res.status).toBe(400);
+  });
+
+  it("aceita até 4 fotos de quase 600 KB (o corpo passa de 1 MB)", async () => {
+    loggedAs();
+    prisma.post.create.mockResolvedValue(createdPost);
+    const big = Buffer.alloc(590 * 1024, 7);
+    big.set([0xff, 0xd8, 0xff]);
+    const image = `data:image/jpeg;base64,${big.toString("base64")}`;
+
+    const res = await request(app).post("/api/posts").set(bearer).send({ content: "", images: [image, image, image, image] });
+
+    expect(res.status).toBe(201);
+    expect(prisma.post.create.mock.calls[0][0].data.images.create).toHaveLength(4);
+  });
+
+  it("recusa a quinta foto", async () => {
+    loggedAs();
+    const image = jpeg([0xff, 0xd8, 0xff, 0xe0]);
+    const res = await request(app).post("/api/posts").set(bearer).send({ images: [image, image, image, image, image] });
+    expect(res.status).toBe(400);
+    expect(prisma.post.create).not.toHaveBeenCalled();
   });
 
   it("publica o post", async () => {
@@ -146,6 +172,36 @@ describe("comentários e perfis", () => {
     expect(res.body).not.toHaveProperty("birthDate");
     // O @ é procurado em minúsculas
     expect(prisma.user.findFirst.mock.calls[0][0].where.username).toBe("outra");
+  });
+});
+
+describe("produtos salvos", () => {
+  it("menor de 12 anos não salva produtos (a loja tem idade mínima)", async () => {
+    const tenYearsAgo = new Date();
+    tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
+    loggedAs({ birthDate: tenYearsAgo });
+
+    expect((await request(app).get("/api/saved/products").set(bearer)).status).toBe(403);
+    expect(prisma.savedProduct.findMany).not.toHaveBeenCalled();
+  });
+
+  it("não salva produto que saiu da loja", async () => {
+    loggedAs();
+    prisma.product.findUnique.mockResolvedValue({ active: false });
+
+    const res = await request(app).put(`/api/products/${POST_ID}/save`).set(bearer);
+
+    expect(res.status).toBe(404);
+    expect(prisma.savedProduct.upsert).not.toHaveBeenCalled();
+  });
+
+  it("salva produto ativo", async () => {
+    loggedAs();
+    prisma.product.findUnique.mockResolvedValue({ active: true });
+
+    const res = await request(app).put(`/api/products/${POST_ID}/save`).set(bearer);
+
+    expect(res.body).toEqual({ savedByMe: true });
   });
 });
 

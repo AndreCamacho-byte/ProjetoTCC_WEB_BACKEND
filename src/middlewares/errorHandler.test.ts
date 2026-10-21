@@ -71,8 +71,28 @@ describe("errorHandler", () => {
     expect(handle(error).statusCode).toBe(503);
   });
 
+  it("@username repetido gravado ao mesmo tempo vira 409 de @ em uso, não erro interno", () => {
+    const error = new Prisma.PrismaClientKnownRequestError("único", {
+      code: "P2002",
+      clientVersion: "6.0.0",
+      meta: { target: ["username"] },
+    });
+    const res = handle(error);
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ error: "Este @username já está em uso", code: "USERNAME_TAKEN" });
+  });
+
+  it("email repetido gravado ao mesmo tempo também vira 409", () => {
+    const error = new Prisma.PrismaClientKnownRequestError("único", {
+      code: "P2002",
+      clientVersion: "6.0.0",
+      meta: { target: ["email"] },
+    });
+    expect(handle(error).statusCode).toBe(409);
+  });
+
   it("não trata como falha passageira os outros erros do Prisma", () => {
-    const error = new Prisma.PrismaClientKnownRequestError("violação", { code: "P2002", clientVersion: "6.0.0" });
+    const error = new Prisma.PrismaClientKnownRequestError("violação", { code: "P2003", clientVersion: "6.0.0" });
     expect(handle(error).statusCode).toBe(500);
   });
 

@@ -35,6 +35,21 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
+  // Valor que precisa ser único já existe (P2002). Os services conferem antes de gravar, mas duas
+  // pessoas pedindo o mesmo @ no mesmo instante passam as duas pela conferência: o banco barra a
+  // segunda, e aqui ela recebe a mesma resposta de "já em uso", e não "erro interno".
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    const fields = String((err.meta as { target?: unknown } | undefined)?.target ?? "");
+    if (fields.includes("username")) {
+      res.status(409).json({ error: "Este @username já está em uso", code: "USERNAME_TAKEN" });
+    } else if (fields.includes("email")) {
+      res.status(409).json({ error: "Este email já está cadastrado" });
+    } else {
+      res.status(409).json({ error: "Esse registro já existe" });
+    }
+    return;
+  }
+
   console.error(err);
   res.status(500).json({ error: "Erro interno do servidor" });
 };

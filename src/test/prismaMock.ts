@@ -123,6 +123,27 @@ export const prisma = {
     upsert: vi.fn(),
     deleteMany: vi.fn(),
   },
+  spot: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  spotImage: {
+    findUnique: vi.fn(),
+  },
+  meetup: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  meetupParticipant: {
+    findMany: vi.fn(),
+    create: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   // Uma transação com lista só espera todas as operações terminarem;
   // com função, roda a função passando o próprio Prisma simulado.
   $transaction: vi.fn(async (operations: unknown): Promise<unknown> => {

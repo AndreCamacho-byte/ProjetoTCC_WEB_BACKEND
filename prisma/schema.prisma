@@ -379,39 +379,72 @@ enum SpotType {
   OUTRO
 }
 
+// Spot sugerido por alguém só aparece no mapa depois que um administrador aprova
+enum SpotStatus {
+  PENDENTE
+  APROVADO
+  RECUSADO
+}
+
 model Spot {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   name        String
   description String?
   latitude    Float
   longitude   Float
-  type        SpotType @default(STREET)
-  imageUrls   String[]
+  type        SpotType   @default(STREET)
+  // Bairro e cidade, escritos por quem cadastrou (ex.: "Ibirapuera, São Paulo")
+  address     String?
+  status      SpotStatus @default(PENDENTE)
+  // Quando um administrador aprovou ou recusou
+  reviewedAt  DateTime?
   // Opcional para o spot continuar existindo se quem criou apagar a conta
   createdById String?
-  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
 
+  images  SpotImage[]
   meetups Meetup[]
 
-  @@index([latitude, longitude])
+  @@index([status])
+  @@index([createdById])
   @@map("spots")
 }
 
+// Fotos do spot (até 3), guardadas no banco como as fotos dos posts
+model SpotImage {
+  id        String   @id @default(uuid())
+  spotId    String
+  spot      Spot     @relation(fields: [spotId], references: [id], onDelete: Cascade)
+  data      Bytes
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([spotId, position])
+  @@map("spot_images")
+}
+
+// Encontro marcado num spot. Quem cria já entra na lista de presença.
 model Meetup {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  startsAt    DateTime
-  spotId      String
-  spot        Spot     @relation(fields: [spotId], references: [id], onDelete: Cascade)
-  creatorId   String
-  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  startsAt        DateTime
+  // Limite de pessoas, contando quem criou. Nulo = sem limite.
+  maxParticipants Int?
+  // Preenchido quando quem criou (ou um administrador) cancela. O encontro continua
+  // aparecendo como cancelado para quem tinha confirmado presença.
+  cancelledAt     DateTime?
+  spotId          String
+  spot            Spot      @relation(fields: [spotId], references: [id], onDelete: Cascade)
+  creatorId       String
+  creator         User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
 
   participants MeetupParticipant[]
 
   @@index([spotId, startsAt])
+  @@index([startsAt])
   @@map("meetups")
 }
 
@@ -423,6 +456,7 @@ model MeetupParticipant {
   joinedAt DateTime @default(now())
 
   @@id([meetupId, userId])
+  @@index([userId])
   @@map("meetup_participants")
 }
 

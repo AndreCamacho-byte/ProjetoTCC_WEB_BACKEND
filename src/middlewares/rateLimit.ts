@@ -113,4 +113,19 @@ export const limits = {
     key: (req) => req.userId ?? clientIp(req),
     message: "Você comentou muitas vezes seguidas. Espere um pouco antes de comentar de novo.",
   }),
+  // Spots e encontros: poucos por conta, para a fila de aprovação e a lista de eventos não encherem de spam
+  spotCreation: rateLimit({
+    name: "spotCreation",
+    windowMs: 24 * 60 * MINUTE,
+    max: 10,
+    key: (req) => req.userId ?? clientIp(req),
+    message: "Você já sugeriu muitos spots hoje. Tente de novo amanhã.",
+  }),
+  meetupCreation: rateLimit({
+    name: "meetupCreation",
+    windowMs: 24 * 60 * MINUTE,
+    max: 10,
+    key: (req) => req.userId ?? clientIp(req),
+    message: "Você já criou muitos encontros hoje. Tente de novo amanhã.",
+  }),
 };

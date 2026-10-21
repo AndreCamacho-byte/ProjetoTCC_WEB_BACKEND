@@ -28,6 +28,12 @@ export const prisma = {
     create: vi.fn(),
     deleteMany: vi.fn(),
   },
+  loginCode: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
   userAvatar: {
     findUnique: vi.fn(),
     upsert: vi.fn(),
@@ -161,6 +167,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     id: "11111111-1111-4111-8111-111111111111",
     name: "Tony Teste",
     username: "tony",
+    usernameChosen: true,
     email: "tony@clutch.test",
     passwordHash: "hash",
     avatarUrl: null,

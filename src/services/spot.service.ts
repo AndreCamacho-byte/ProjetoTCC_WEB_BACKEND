@@ -223,7 +223,8 @@ function toMeetupView(meetup: MeetupWithRelations, viewer: Viewer, now: Date) {
     creator: meetup.creator,
     joinedByMe: meetup.participants.length > 0,
     isCreator,
-    canCancel: (isCreator || viewer.isAdmin) && !cancelled && !started,
+    // Cancelar o encontro para todo mundo é moderação (só administrador). Quem criou só desmarca a própria ida.
+    canCancel: viewer.isAdmin && !cancelled && !started,
   };
 }
 
@@ -250,13 +251,13 @@ export async function listUpcomingMeetups(viewer: Viewer, limit: number, now = n
   return meetups.map((meetup) => toMeetupView(meetup, viewer, now));
 }
 
-// Encontros em que a pessoa confirmou presença (inclui os que ela criou), dos últimos 7 dias em diante.
-// Os cancelados continuam aqui: é assim que quem confirmou fica sabendo do cancelamento.
+// Encontros em que a pessoa confirmou presença e os que ela criou (mesmo se desmarcou a ida),
+// dos últimos 7 dias em diante. Os cancelados continuam aqui: é assim que quem confirmou fica sabendo.
 export async function listMyMeetups(viewer: Viewer, now = new Date()) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const meetups = await prisma.meetup.findMany({
     where: {
-      participants: { some: { userId: viewer.id } },
+      OR: [{ participants: { some: { userId: viewer.id } } }, { creatorId: viewer.id }],
       startsAt: { gte: weekAgo },
       spot: { status: "APROVADO" },
       ...activeCreator,
@@ -324,21 +325,19 @@ export async function joinMeetup(meetupId: string, viewer: Viewer, now = new Dat
   return getMeetup(meetupId, viewer, now);
 }
 
-// Desistir. Quem criou não sai da lista: se não puder ir, cancela o encontro.
+// Desmarcar a ida. Vale para todo mundo, inclusive quem criou: o encontro continua de pé
+// e a pessoa pode confirmar de novo depois (se ainda houver vaga).
 export async function leaveMeetup(meetupId: string, viewer: Viewer, now = new Date()) {
-  const meetup = await findMeetup(meetupId, viewer);
-  if (meetup.creatorId === viewer.id) {
-    throw new AppError("Você criou este encontro. Se não puder ir, cancele o encontro.", 400);
-  }
+  await findMeetup(meetupId, viewer);
   await prisma.meetupParticipant.deleteMany({ where: { meetupId, userId: viewer.id } });
   return getMeetup(meetupId, viewer, now);
 }
 
-// Cancelar: quem criou ou um administrador, até a hora do encontro
+// Cancelar o encontro para todo mundo: só administrador (moderação), até a hora do encontro
 export async function cancelMeetup(meetupId: string, viewer: Viewer, now = new Date()) {
   const meetup = await findMeetup(meetupId, viewer);
-  if (meetup.creatorId !== viewer.id && !viewer.isAdmin) {
-    throw new AppError("Só quem criou o encontro pode cancelar", 403);
+  if (!viewer.isAdmin) {
+    throw new AppError("Só a equipe pode cancelar um encontro. Para não ir, desmarque sua presença.", 403);
   }
   if (meetup.cancelledAt) {
     throw new AppError("Esse encontro já foi cancelado", 409, "MEETUP_CANCELLED");

@@ -25,15 +25,21 @@ export function clientIp(req: Request) {
   return req.get("x-real-ip") || req.ip || "desconhecido";
 }
 
+type Limiter = RequestHandler & {
+  // Conta uma vez sem passar por uma rota (ex.: dentro de um service, só quando vai mesmo enviar email).
+  // Passou do limite: lança o erro 429.
+  consume: (id: string) => void;
+};
+
 // Limita quantas vezes a mesma origem pode chamar uma rota dentro de uma janela de tempo.
 // Passou do limite: responde 429 e informa em quantos segundos dá para tentar de novo.
-export function rateLimit({ name, windowMs, max, key = clientIp, message }: RateLimitOptions): RequestHandler {
+export function rateLimit({ name, windowMs, max, key = clientIp, message }: RateLimitOptions): Limiter {
   const store = new Map<string, Counter>();
   stores.set(name, store);
 
-  return (req, res, next) => {
+  // Soma uma tentativa. Devolve em quantos segundos libera, se passou do limite (ou null)
+  function hit(id: string) {
     const now = Date.now();
-    const id = key(req);
     let counter = store.get(id);
 
     if (!counter || counter.resetAt <= now) {
@@ -43,17 +49,6 @@ export function rateLimit({ name, windowMs, max, key = clientIp, message }: Rate
 
     counter.count += 1;
 
-    if (counter.count > max) {
-      const retryAfterSeconds = Math.ceil((counter.resetAt - now) / 1000);
-      res.set("Retry-After", String(retryAfterSeconds));
-      const minutes = Math.ceil(retryAfterSeconds / 60);
-      throw new AppError(
-        message ?? `Muitas tentativas. Tente de novo em ${minutes} ${minutes === 1 ? "minuto" : "minutos"}.`,
-        429,
-        "RATE_LIMITED",
-      );
-    }
-
     // Faxina: de vez em quando apaga as contagens que já venceram, para o Map não crescer sem parar
     if (store.size > 5000) {
       for (const [entryId, entry] of store) {
@@ -61,8 +56,33 @@ export function rateLimit({ name, windowMs, max, key = clientIp, message }: Rate
       }
     }
 
+    return counter.count > max ? Math.ceil((counter.resetAt - now) / 1000) : null;
+  }
+
+  function tooMany(retryAfterSeconds: number) {
+    const minutes = Math.ceil(retryAfterSeconds / 60);
+    return new AppError(
+      message ?? `Muitas tentativas. Tente de novo em ${minutes} ${minutes === 1 ? "minuto" : "minutos"}.`,
+      429,
+      "RATE_LIMITED",
+    );
+  }
+
+  const handler: RequestHandler = (req, res, next) => {
+    const retryAfterSeconds = hit(key(req));
+    if (retryAfterSeconds !== null) {
+      res.set("Retry-After", String(retryAfterSeconds));
+      throw tooMany(retryAfterSeconds);
+    }
     next();
   };
+
+  return Object.assign(handler, {
+    consume(id: string) {
+      const retryAfterSeconds = hit(id);
+      if (retryAfterSeconds !== null) throw tooMany(retryAfterSeconds);
+    },
+  });
 }
 
 // Zera todas as contagens (usado nos testes)

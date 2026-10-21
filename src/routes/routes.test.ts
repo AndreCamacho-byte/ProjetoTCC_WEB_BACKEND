@@ -44,12 +44,12 @@ describe("GET /api/health", () => {
 });
 
 describe("POST /api/auth/register", () => {
-  const valid = { name: "Tony Teste", email: "tony@clutch.test", password: "skate1234", birthDate: "2000-01-15" };
+  const valid = { name: "Tony Teste", username: "tony", email: "tony@clutch.test", password: "skate1234", birthDate: "2000-01-15" };
 
   it("aponta cada campo inválido", async () => {
     const res = await request(app)
       .post("/api/auth/register")
-      .send({ name: "A", email: "nao-e-email", password: "123", birthDate: "2005-02-31" });
+      .send({ name: "A", username: "Ab", email: "nao-e-email", password: "123", birthDate: "2005-02-31" });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Dados inválidos");
@@ -58,6 +58,7 @@ describe("POST /api/auth/register", () => {
       "email",
       "name",
       "password",
+      "username",
     ]);
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
@@ -109,13 +110,44 @@ describe("POST /api/auth/login", () => {
     expect(res.body.code).toBe("EMAIL_NOT_VERIFIED");
   });
 
-  it("devolve usuário (sem a senha) e token no login correto", async () => {
+  it("com a senha certa pede o código do email, sem devolver token ainda", async () => {
     const passwordHash = await bcrypt.hash("skate1234", 4);
     prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
+    prisma.loginCode.findUnique.mockResolvedValue(null);
 
     const res = await request(app)
       .post("/api/auth/login")
       .send({ email: "tony@clutch.test", password: "skate1234" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ requiresCode: true, email: "tony@clutch.test" });
+    expect(res.body).not.toHaveProperty("token");
+    expect(vi.mocked(sendMail)).toHaveBeenCalledOnce();
+  });
+});
+
+describe("POST /api/auth/login/verify", () => {
+  it("recusa código mal formatado sem consultar o banco", async () => {
+    const res = await request(app).post("/api/auth/login/verify").send({ email: "tony@clutch.test", code: "12a456" });
+    expect(res.status).toBe(400);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("com o código certo devolve usuário (sem a senha) e token", async () => {
+    const { createHash } = await import("node:crypto");
+    const user = makeUser();
+    prisma.user.findUnique.mockResolvedValue({
+      ...user,
+      loginCode: {
+        userId: user.id,
+        codeHash: createHash("sha256").update(`login:${user.id}:123456`).digest("hex"),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+      },
+    });
+
+    const res = await request(app).post("/api/auth/login/verify").send({ email: "tony@clutch.test", code: "123456" });
 
     expect(res.status).toBe(200);
     expect(res.body.token).toEqual(expect.any(String));
@@ -382,6 +414,7 @@ describe("outras respostas", () => {
         "/health",
         "/auth/register",
         "/auth/login",
+        "/auth/login/verify",
         "/auth/verify-code",
         "/auth/forgot-password",
         "/auth/reset-password",
@@ -423,7 +456,7 @@ describe("endereço usado nos links dos emails", () => {
   const register = () =>
     request(app)
       .post("/api/auth/register")
-      .send({ name: "Tony Teste", email: "tony@clutch.test", password: "skate1234", birthDate: "2000-01-15" });
+      .send({ name: "Tony Teste", username: "tony", email: "tony@clutch.test", password: "skate1234", birthDate: "2000-01-15" });
 
   beforeEach(() => {
     prisma.user.findUnique.mockResolvedValue(null);

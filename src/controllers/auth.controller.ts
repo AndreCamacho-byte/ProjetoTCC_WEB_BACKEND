@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "../config/env";
 import * as authService from "../services/auth.service";
 import { birthDateSchema } from "../utils/age";
+import { usernameField } from "../utils/username";
 
 // Primeiro tira os espaços e passa para minúsculas, só depois confere o formato
 // (senão um espaço no fim, comum no teclado do celular, faria o email ser recusado)
@@ -12,6 +13,7 @@ const passwordField = z.string().min(8, "Senha precisa ter pelo menos 8 caracter
 
 const registerSchema = z.object({
   name: z.string().trim().min(2, "Nome precisa ter pelo menos 2 caracteres").max(60),
+  username: usernameField,
   email: emailField,
   password: passwordField,
   birthDate: birthDateSchema,
@@ -64,6 +66,11 @@ export async function register(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
   res.json(await authService.login(data));
+}
+
+export async function verifyLoginCode(req: Request, res: Response) {
+  const { email, code } = verifyCodeSchema.parse(req.body);
+  res.json(await authService.verifyLoginCode(email, code));
 }
 
 export async function verifyEmail(req: Request, res: Response) {

@@ -16,7 +16,9 @@ export async function updateProfile(userId: string, data: ProfileInput) {
     }
   }
 
-  return toPublicUser(await prisma.user.update({ where: { id: userId }, data }));
+  // Salvar um @ conta como escolha da pessoa (as contas antigas tinham o @ gerado pelo email)
+  const update = data.username ? { ...data, usernameChosen: true } : data;
+  return toPublicUser(await prisma.user.update({ where: { id: userId }, data: update }));
 }
 
 // Troca de senha por quem está logado: pede a senha atual, para ninguém trocar a senha

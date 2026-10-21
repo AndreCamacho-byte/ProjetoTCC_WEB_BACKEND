@@ -15,6 +15,7 @@ export const authRoutes = Router();
  *         id: { type: string, format: uuid }
  *         name: { type: string, example: Tony Hawk }
  *         username: { type: string, example: tonyhawk }
+ *         usernameChosen: { type: boolean, description: Falso nas contas antigas cujo @ foi gerado pelo email. O site pede para escolher um @ antes de continuar. }
  *         email: { type: string, format: email, example: tony@clutch.com }
  *         avatarUrl: { type: string, nullable: true }
  *         bio: { type: string, nullable: true }
@@ -34,6 +35,13 @@ export const authRoutes = Router();
  *       properties:
  *         user: { $ref: '#/components/schemas/User' }
  *         token: { type: string, description: JWT para enviar no header Authorization }
+ *     LoginChallenge:
+ *       type: object
+ *       description: Senha correta. Falta digitar o código enviado por email (POST /auth/login/verify).
+ *       properties:
+ *         requiresCode: { type: boolean, example: true }
+ *         email: { type: string, format: email }
+ *         message: { type: string }
  *     Message:
  *       type: object
  *       properties:
@@ -60,7 +68,7 @@ export const authRoutes = Router();
  *     description: |
  *       Limite: 20 cadastros por hora por endereço IP (resposta 429 ao passar).
  *       Se o email pertence a um cadastro que nunca foi confirmado, ele é substituído pelos dados novos.
- *       O @username é gerado automaticamente a partir do email.
+ *       A pessoa escolhe o @username (3 a 20 letras minúsculas, números ou _).
  *       A conta nasce **sem confirmação**: é enviado um email com um link (válido por 24h)
  *       e o login só é liberado depois que a pessoa clica nele. Por isso esta rota não devolve token.
  *     requestBody:
@@ -69,9 +77,10 @@ export const authRoutes = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, email, password, birthDate]
+ *             required: [name, username, email, password, birthDate]
  *             properties:
  *               name: { type: string, example: Tony Hawk }
+ *               username: { type: string, example: tonyhawk }
  *               email: { type: string, format: email, example: tony@clutch.com }
  *               password: { type: string, format: password, minLength: 8, example: skate1234 }
  *               birthDate: { type: string, format: date, example: '2005-05-12', description: Formato AAAA-MM-DD }
@@ -91,7 +100,7 @@ export const authRoutes = Router();
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ValidationError' }
  *       409:
- *         description: Email já cadastrado
+ *         description: Email já cadastrado ou @username em uso (código USERNAME_TAKEN)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -103,8 +112,12 @@ authRoutes.post("/auth/register", limits.register, limits.dailyEmails, authContr
  * /auth/login:
  *   post:
  *     tags: [Auth]
- *     summary: Faz login e devolve o token JWT
- *     description: Limite de 30 tentativas a cada 15 minutos por endereço IP (resposta 429 ao passar).
+ *     summary: Primeira etapa do login (email e senha)
+ *     description: |
+ *       Com a senha certa, envia um código de 6 dígitos para o email da conta (vale 10 minutos) e responde
+ *       requiresCode. O token só sai na segunda etapa, POST /auth/login/verify.
+ *       Pedir de novo em menos de 1 minuto não envia outro email (o código anterior continua valendo).
+ *       Limite de 30 tentativas a cada 15 minutos por endereço IP (resposta 429 ao passar).
  *     requestBody:
  *       required: true
  *       content:
@@ -117,10 +130,10 @@ authRoutes.post("/auth/register", limits.register, limits.dailyEmails, authContr
  *               password: { type: string, format: password, example: skate1234 }
  *     responses:
  *       200:
- *         description: Login realizado
+ *         description: Senha correta, código enviado por email
  *         content:
  *           application/json:
- *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *             schema: { $ref: '#/components/schemas/LoginChallenge' }
  *       400:
  *         description: Dados inválidos
  *         content:
@@ -142,6 +155,39 @@ authRoutes.post("/auth/register", limits.register, limits.dailyEmails, authContr
  *                 code: { type: string, example: EMAIL_NOT_VERIFIED }
  */
 authRoutes.post("/auth/login", limits.login, authController.login);
+
+/**
+ * @openapi
+ * /auth/login/verify:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Segunda etapa do login (código do email) e devolve o token JWT
+ *     description: O código vale 10 minutos, uma vez só, com até 5 tentativas.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, code]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               code: { type: string, example: '123456' }
+ *     responses:
+ *       200:
+ *         description: Login realizado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       400:
+ *         description: Código incorreto, vencido ou mal formatado (INVALID_CODE)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       429:
+ *         description: Muitas tentativas erradas (TOO_MANY_ATTEMPTS)
+ */
+authRoutes.post("/auth/login/verify", limits.tokenUse, authController.verifyLoginCode);
 
 /**
  * @openapi

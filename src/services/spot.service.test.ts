@@ -159,7 +159,8 @@ describe("criar encontro", () => {
     const meetup = await spots.createMeetup(SPOT, ana, { title: "Sessão", startsAt: TOMORROW, maxParticipants: 10 }, NOW);
 
     expect(prisma.meetup.create.mock.calls[0][0].data.participants).toEqual({ create: { userId: ANA } });
-    expect(meetup).toMatchObject({ joinedByMe: true, isCreator: true, canCancel: true });
+    // Quem criou só desmarca a própria ida; cancelar para todos é coisa da equipe
+    expect(meetup).toMatchObject({ joinedByMe: true, isCreator: true, canCancel: false });
   });
 });
 
@@ -193,30 +194,52 @@ describe("presença", () => {
     expect(prisma.meetupParticipant.create).not.toHaveBeenCalled();
   });
 
-  it("quem criou não desiste: precisa cancelar", async () => {
+  it("qualquer um desmarca a ida, inclusive quem criou, sem cancelar o encontro", async () => {
     prisma.meetup.findFirst.mockResolvedValue(makeMeetup());
-    await expect(spots.leaveMeetup(MEETUP, ana, NOW)).rejects.toMatchObject({ statusCode: 400 });
 
+    await spots.leaveMeetup(MEETUP, ana, NOW);
     await spots.leaveMeetup(MEETUP, bia, NOW);
+
+    expect(prisma.meetupParticipant.deleteMany).toHaveBeenCalledWith({ where: { meetupId: MEETUP, userId: ANA } });
     expect(prisma.meetupParticipant.deleteMany).toHaveBeenCalledWith({ where: { meetupId: MEETUP, userId: BIA } });
+    expect(prisma.meetup.update).not.toHaveBeenCalled();
+  });
+
+  it("depois de desmarcar, dá para confirmar de novo", async () => {
+    // Já fora da lista (participants vazio para quem está vendo)
+    prisma.meetup.findFirst.mockResolvedValue(makeMeetup({ participants: [] }));
+
+    await spots.joinMeetup(MEETUP, ana, NOW);
+
+    expect(prisma.meetupParticipant.create).toHaveBeenCalledWith({ data: { meetupId: MEETUP, userId: ANA } });
+  });
+
+  it("quem criou continua vendo o encontro em Meus encontros depois de desmarcar", async () => {
+    prisma.meetup.findMany.mockResolvedValue([]);
+    await spots.listMyMeetups(ana, NOW);
+    expect(prisma.meetup.findMany.mock.calls[0][0].where.OR).toEqual([
+      { participants: { some: { userId: ANA } } },
+      { creatorId: ANA },
+    ]);
   });
 });
 
 describe("cancelar encontro", () => {
-  it("só quem criou ou um administrador", async () => {
+  it("só um administrador cancela para todos (nem quem criou)", async () => {
     prisma.meetup.findFirst.mockResolvedValue(makeMeetup());
 
     await expect(spots.cancelMeetup(MEETUP, bia, NOW)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(spots.cancelMeetup(MEETUP, ana, NOW)).rejects.toMatchObject({ statusCode: 403 });
     await spots.cancelMeetup(MEETUP, admin, NOW);
     expect(prisma.meetup.update).toHaveBeenCalledWith({ where: { id: MEETUP }, data: { cancelledAt: NOW } });
   });
 
   it("não cancela de novo nem depois que começou", async () => {
     prisma.meetup.findFirst.mockResolvedValue(makeMeetup({ cancelledAt: NOW }));
-    await expect(spots.cancelMeetup(MEETUP, ana, NOW)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(spots.cancelMeetup(MEETUP, admin, NOW)).rejects.toMatchObject({ statusCode: 409 });
 
     prisma.meetup.findFirst.mockResolvedValue(makeMeetup({ startsAt: new Date("2026-10-21T11:00:00.000Z") }));
-    await expect(spots.cancelMeetup(MEETUP, ana, NOW)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(spots.cancelMeetup(MEETUP, admin, NOW)).rejects.toMatchObject({ statusCode: 409 });
     expect(prisma.meetup.update).not.toHaveBeenCalled();
   });
 

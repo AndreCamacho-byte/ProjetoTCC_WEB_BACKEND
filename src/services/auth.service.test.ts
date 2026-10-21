@@ -34,6 +34,7 @@ describe("toPublicUser", () => {
 describe("register", () => {
   const input = {
     name: "Tony Teste",
+    username: "tonyhawk",
     email: "tony.hawk@clutch.test",
     password: "skate1234",
     birthDate: new Date("2000-01-15T00:00:00.000Z"),
@@ -87,22 +88,23 @@ describe("register", () => {
     expect(await bcrypt.compare("skate1234", data.passwordHash)).toBe(true);
   });
 
-  it("salva a data de nascimento e gera o @username a partir do email", async () => {
+  it("salva a data de nascimento e o @username escolhido (nunca gerado pelo email)", async () => {
     await auth.register(input, APP_URL);
 
     const { data } = prisma.user.create.mock.calls[0][0];
     expect(data.birthDate).toEqual(input.birthDate);
     expect(data.username).toBe("tonyhawk");
+    expect(data.usernameChosen).toBe(true);
   });
 
-  it("acrescenta números ao @username quando ele já existe", async () => {
+  it("recusa um @username que já é de outra conta", async () => {
     prisma.user.findUnique.mockImplementation(async ({ where }) =>
-      where.username === "tonyhawk" ? makeUser({ username: "tonyhawk" }) : null,
+      where.username === "tonyhawk" ? makeUser({ id: "outra-conta", username: "tonyhawk" }) : null,
     );
 
-    await auth.register(input, APP_URL);
-
-    expect(prisma.user.create.mock.calls[0][0].data.username).toMatch(/^tonyhawk\d{4}$/);
+    await expect(auth.register(input, APP_URL)).rejects.toMatchObject({ statusCode: 409, code: "USERNAME_TAKEN" });
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(sendMailMock).not.toHaveBeenCalled();
   });
 
   it("não devolve token: a pessoa só entra depois de confirmar o email", async () => {
@@ -176,32 +178,107 @@ describe("login", () => {
     });
   });
 
-  it("devolve o usuário sem a senha e um token válido", async () => {
+  it("com a senha certa, manda um código por email e ainda não devolve token", async () => {
     prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
+    prisma.loginCode.findUnique.mockResolvedValue(null);
 
     const result = await auth.login({ email: "tony@clutch.test", password: "skate1234" });
 
-    expect(result.user).not.toHaveProperty("passwordHash");
-    const payload = jwt.verify(result.token, env.JWT_SECRET) as jwt.JwtPayload;
-    expect(payload.sub).toBe(makeUser().id);
-    expect(payload.v).toBe(0);
+    expect(result).toMatchObject({ requiresCode: true, email: "tony@clutch.test" });
+    expect(result).not.toHaveProperty("token");
+    // Só o hash do código fica salvo
+    const { create } = prisma.loginCode.upsert.mock.calls[0][0];
+    expect(create.codeHash).toMatch(/^[a-f0-9]{64}$/);
+    const minutes = (create.expiresAt.getTime() - Date.now()) / 60_000;
+    expect(minutes).toBeCloseTo(10, 0);
+    // O email leva o código que gera aquele hash
+    const mail = sendMailMock.mock.calls[0][0];
+    const code = mail.subject.match(/\d{6}/)![0];
+    expect(create.codeHash).toBe(sha256(`login:${makeUser().id}:${code}`));
+    expect(mail.text).toContain(code);
   });
 
-  it("transforma em administrador a conta cujo email está em ADMIN_EMAILS", async () => {
-    const admin = makeUser({ email: "admin@clutch.test", passwordHash });
-    prisma.user.findUnique.mockResolvedValue(admin);
-    prisma.user.update.mockResolvedValue({ ...admin, role: "ADMIN" });
+  it("não manda outro código se o último saiu há menos de 1 minuto", async () => {
+    prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
+    prisma.loginCode.findUnique.mockResolvedValue({ createdAt: new Date(), expiresAt: new Date(Date.now() + 60_000) });
 
-    const result = await auth.login({ email: "admin@clutch.test", password: "skate1234" });
+    await auth.login({ email: "tony@clutch.test", password: "skate1234" });
 
-    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: admin.id }, data: { role: "ADMIN" } });
-    expect(result.user.role).toBe("ADMIN");
+    expect(prisma.loginCode.upsert).not.toHaveBeenCalled();
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("senha errada não gera código nem email", async () => {
+    prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
+    await expect(auth.login({ email: "tony@clutch.test", password: "errada123" })).rejects.toMatchObject({ statusCode: 401 });
+    expect(sendMailMock).not.toHaveBeenCalled();
   });
 
   it("não mexe na função de uma conta comum", async () => {
     prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
     await auth.login({ email: "tony@clutch.test", password: "skate1234" });
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("verifyLoginCode", () => {
+  const user = makeUser();
+  const withCode = (overrides = {}, userOverrides = {}) =>
+    prisma.user.findUnique.mockResolvedValue({
+      ...user,
+      ...userOverrides,
+      loginCode: {
+        userId: user.id,
+        codeHash: sha256(`login:${user.id}:123456`),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+        createdAt: new Date(),
+        ...overrides,
+      },
+    });
+
+  it("com o código certo devolve o token e apaga o código (uso único)", async () => {
+    withCode();
+
+    const result = await auth.verifyLoginCode("tony@clutch.test", "123456");
+
+    expect(result.user).not.toHaveProperty("passwordHash");
+    const payload = jwt.verify(result.token, env.JWT_SECRET) as jwt.JwtPayload;
+    expect(payload.sub).toBe(user.id);
+    expect(prisma.loginCode.delete).toHaveBeenCalledWith({ where: { userId: user.id } });
+  });
+
+  it("código errado conta uma tentativa", async () => {
+    withCode();
+    await expect(auth.verifyLoginCode("tony@clutch.test", "000000")).rejects.toMatchObject({ code: "INVALID_CODE" });
+    expect(prisma.loginCode.update).toHaveBeenCalledWith({ where: { userId: user.id }, data: { attempts: { increment: 1 } } });
+  });
+
+  it("recusa código vencido, sem código pedido e depois de 5 erros", async () => {
+    withCode({ expiresAt: minutesAgo(1) });
+    await expect(auth.verifyLoginCode("tony@clutch.test", "123456")).rejects.toMatchObject({ code: "INVALID_CODE" });
+
+    prisma.user.findUnique.mockResolvedValue({ ...user, loginCode: null });
+    await expect(auth.verifyLoginCode("tony@clutch.test", "123456")).rejects.toMatchObject({ code: "INVALID_CODE" });
+
+    withCode({ attempts: 5 });
+    await expect(auth.verifyLoginCode("tony@clutch.test", "123456")).rejects.toMatchObject({ statusCode: 429 });
+    expect(prisma.loginCode.delete).not.toHaveBeenCalled();
+  });
+
+  it("não entra se a conta foi suspensa depois da senha", async () => {
+    withCode({}, { suspendedAt: new Date() });
+    await expect(auth.verifyLoginCode("tony@clutch.test", "123456")).rejects.toMatchObject({ code: "ACCOUNT_SUSPENDED" });
+  });
+
+  it("transforma em administrador a conta cujo email está em ADMIN_EMAILS", async () => {
+    withCode({}, { email: "admin@clutch.test" });
+    prisma.user.update.mockImplementation(async ({ data }) => ({ ...user, email: "admin@clutch.test", ...data }));
+
+    const result = await auth.verifyLoginCode("admin@clutch.test", "123456");
+
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: user.id }, data: { role: "ADMIN" } });
+    expect(result.user.role).toBe("ADMIN");
   });
 });
 

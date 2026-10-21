@@ -299,8 +299,8 @@ spotRoutes.get("/meetups", ...member, spots.listUpcomingMeetups);
  * /meetups/mine:
  *   get:
  *     tags: [Spots]
- *     summary: Encontros em que você confirmou presença
- *     description: Inclui os que você criou e os cancelados (é assim que quem confirmou fica sabendo do cancelamento). Mostra da última semana em diante.
+ *     summary: Encontros em que você confirmou presença e os que você criou
+ *     description: Inclui os cancelados (é assim que quem confirmou fica sabendo do cancelamento). Mostra da última semana em diante.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -360,8 +360,8 @@ spotRoutes.get("/meetups/:id", ...member, spots.getMeetup);
  *       409: { description: 'Encontro lotado (MEETUP_FULL), cancelado (MEETUP_CANCELLED) ou que já começou (MEETUP_STARTED)' }
  *   delete:
  *     tags: [Spots]
- *     summary: Desiste de ir
- *     description: Quem criou não pode desistir; precisa cancelar o encontro.
+ *     summary: Desmarca a presença
+ *     description: Vale para todo mundo, inclusive quem criou. O encontro continua, e dá para confirmar de novo depois.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -375,7 +375,6 @@ spotRoutes.get("/meetups/:id", ...member, spots.getMeetup);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/MeetupDetail' }
- *       400: { description: Quem criou não pode desistir }
  */
 spotRoutes.post("/meetups/:id/join", ...member, spots.joinMeetup);
 spotRoutes.delete("/meetups/:id/join", ...member, spots.leaveMeetup);
@@ -386,7 +385,7 @@ spotRoutes.delete("/meetups/:id/join", ...member, spots.leaveMeetup);
  *   post:
  *     tags: [Spots]
  *     summary: Cancela um encontro
- *     description: Quem criou ou um administrador, até a hora do encontro. Quem confirmou continua vendo o encontro como cancelado.
+ *     description: Só administrador (moderação), até a hora do encontro. Quem confirmou continua vendo o encontro como cancelado.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -400,7 +399,7 @@ spotRoutes.delete("/meetups/:id/join", ...member, spots.leaveMeetup);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/MeetupDetail' }
- *       403: { description: Só quem criou pode cancelar }
+ *       403: { description: Só administrador cancela }
  *       409: { description: Já cancelado ou já começou }
  */
 spotRoutes.post("/meetups/:id/cancel", ...member, spots.cancelMeetup);

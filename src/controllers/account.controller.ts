@@ -3,17 +3,14 @@ import { z } from "zod";
 import { AppError } from "../errors/AppError";
 import * as accountService from "../services/account.service";
 import { birthDateSchema } from "../utils/age";
+import { usernameField } from "../utils/username";
 
 const MAX_AVATAR_BYTES = 300 * 1024; // o site já manda a foto reduzida (256x256), então isso sobra
 
 const profileSchema = z
   .object({
     name: z.string().trim().min(2, "Nome precisa ter pelo menos 2 caracteres").max(60),
-    username: z
-      .string()
-      .trim()
-      .toLowerCase()
-      .regex(/^[a-z0-9_]{3,20}$/, "Use de 3 a 20 letras minúsculas, números ou _"),
+    username: usernameField,
     // Texto vazio apaga a bio
     bio: z
       .string()

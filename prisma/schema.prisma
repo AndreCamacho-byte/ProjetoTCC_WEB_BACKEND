@@ -30,6 +30,9 @@ model User {
   id              String      @id @default(uuid())
   name            String
   username        String      @unique
+  // Falso nas contas antigas, cujo @ foi gerado a partir do email (e mostrava parte dele).
+  // Enquanto for falso, o site pede para a pessoa escolher um @ antes de continuar.
+  usernameChosen  Boolean     @default(false)
   email           String      @unique
   passwordHash    String
   avatarUrl       String?
@@ -52,6 +55,7 @@ model User {
 
   verificationTokens  EmailVerificationToken[]
   passwordResetTokens PasswordResetToken[]
+  loginCode           LoginCode?
   avatar              UserAvatar?
   posts               Post[]
   comments            Comment[]
@@ -84,6 +88,19 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+// Código de 6 dígitos enviado por email a cada login, depois que a senha confere.
+// Um por conta (pedir de novo substitui o anterior). Só o hash fica salvo. Vale 10 minutos e 5 tentativas.
+model LoginCode {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("login_codes")
 }
 
 // Foto de perfil, guardada no banco (JPEG pequeno, já recortado pelo site).

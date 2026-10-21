@@ -3,14 +3,16 @@ import bcrypt from "bcryptjs";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import type { User } from "@prisma/client";
 import { env } from "../config/env";
+import { loginCodeTemplate } from "../emails/loginCode";
 import { resetPasswordTemplate } from "../emails/resetPassword";
 import { verifyEmailTemplate } from "../emails/verifyEmail";
 import { AppError } from "../errors/AppError";
 import { sendMail } from "../lib/mail";
 import { prisma } from "../lib/prisma";
 import { SUSPENDED_MESSAGE } from "../middlewares/auth";
+import { limits } from "../middlewares/rateLimit";
 
-type RegisterInput = { name: string; email: string; password: string; birthDate: Date };
+type RegisterInput = { name: string; username: string; email: string; password: string; birthDate: Date };
 type LoginInput = { email: string; password: string };
 
 // Nunca devolve o hash da senha (nem o controle interno de sessões) para o cliente
@@ -26,23 +28,6 @@ export function signToken(user: Pick<User, "id" | "tokenVersion">) {
   return jwt.sign({ sub: user.id, v: user.tokenVersion }, env.JWT_SECRET, {
     expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"],
   });
-}
-
-// O cadastro não pede @username, então ele é gerado a partir do email
-// (ex.: joao.silva@gmail.com -> joaosilva, ou joaosilva4821 se já existir)
-async function generateUsername(email: string) {
-  const base =
-    email
-      .split("@")[0]
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "")
-      .slice(0, 20) || "skater";
-
-  let username = base;
-  while (await prisma.user.findUnique({ where: { username } })) {
-    username = `${base}${Math.floor(1000 + Math.random() * 9000)}`;
-  }
-  return username;
 }
 
 // ---------- Administradores ----------
@@ -101,7 +86,7 @@ async function sendVerificationEmail(user: User, appUrl: string) {
 // Contas que nunca confirmaram o email são apagadas depois deste prazo
 const UNVERIFIED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export async function register({ name, email, password, birthDate }: RegisterInput, appUrl: string) {
+export async function register({ name, username, email, password, birthDate }: RegisterInput, appUrl: string) {
   // Faxina: remove cadastros antigos que nunca foram confirmados
   await prisma.user.deleteMany({
     where: { emailVerifiedAt: null, createdAt: { lt: new Date(Date.now() - UNVERIFIED_TTL_MS) } },
@@ -112,6 +97,12 @@ export async function register({ name, email, password, birthDate }: RegisterInp
     throw new AppError("Este email já está cadastrado", 409);
   }
 
+  // O @ é escolhido no cadastro (antes era gerado a partir do email e mostrava parte dele)
+  const owner = await prisma.user.findUnique({ where: { username } });
+  if (owner && owner.id !== existing?.id) {
+    throw new AppError("Este @username já está em uso", 409, "USERNAME_TAKEN");
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
 
   // Se já existe um cadastro com esse email que nunca foi confirmado, ele é substituído pelos
@@ -120,10 +111,10 @@ export async function register({ name, email, password, birthDate }: RegisterInp
   const user = existing
     ? await prisma.user.update({
         where: { id: existing.id },
-        data: { name, birthDate, passwordHash, tokenVersion: { increment: 1 } },
+        data: { name, username, usernameChosen: true, birthDate, passwordHash, tokenVersion: { increment: 1 } },
       })
     : await prisma.user.create({
-        data: { name, email, birthDate, passwordHash, username: await generateUsername(email) },
+        data: { name, email, birthDate, passwordHash, username, usernameChosen: true },
       });
 
   await sendVerificationEmail(user, appUrl);
@@ -270,6 +261,69 @@ export async function login({ email, password }: LoginInput) {
   if (user.suspendedAt) {
     throw new AppError(SUSPENDED_MESSAGE, 403, "ACCOUNT_SUSPENDED");
   }
+
+  // A senha está certa, mas o login só termina com o código enviado por email (segunda etapa)
+  await sendLoginCode(user);
+  return {
+    requiresCode: true as const,
+    email: user.email,
+    message: "Enviamos um código de 6 dígitos para o seu email. Digite para terminar de entrar.",
+  };
+}
+
+const LOGIN_CODE_TTL_MS = 10 * 60 * 1000; // o código de login vale 10 minutos
+// "login:" no começo para o hash nunca coincidir com o do código de confirmação de conta
+const hashLoginCode = (userId: string, code: string) => hashToken(`login:${userId}:${code}`);
+
+// Gera um código novo (substituindo o anterior) e envia por email. Se a pessoa pediu há menos
+// de um minuto (ex.: clicou em "entrar" duas vezes), não manda outro: o anterior continua valendo.
+async function sendLoginCode(user: User) {
+  const last = await prisma.loginCode.findUnique({ where: { userId: user.id } });
+  if (last && Date.now() - last.createdAt.getTime() < RESEND_COOLDOWN_MS && last.expiresAt.getTime() > Date.now()) {
+    return;
+  }
+
+  // Conta no teto diário de emails do site (cota do Brevo). Só chega aqui com a senha certa,
+  // então tentativas de senha errada não gastam a cota.
+  limits.dailyEmails.consume("site-inteiro");
+
+  const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const data = { codeHash: hashLoginCode(user.id, code), attempts: 0, expiresAt: new Date(Date.now() + LOGIN_CODE_TTL_MS), createdAt: new Date() };
+  await prisma.loginCode.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
+
+  try {
+    await sendMail({ to: { email: user.email, name: user.name }, ...loginCodeTemplate({ name: user.name, code }) });
+  } catch (error) {
+    console.error("Falha ao enviar o código de login:", error);
+  }
+}
+
+// Segunda etapa do login: confere o código e devolve o token
+export async function verifyLoginCode(email: string, code: string) {
+  const user = await prisma.user.findUnique({ where: { email }, include: { loginCode: true } });
+  const record = user?.loginCode;
+
+  // Mesma mensagem para email inexistente, sem código pedido e código vencido
+  if (!user || !record || record.expiresAt.getTime() < Date.now()) {
+    throw new AppError("Código inválido ou expirado. Entre de novo para receber outro.", 400, "INVALID_CODE");
+  }
+
+  if (record.attempts >= MAX_CODE_ATTEMPTS) {
+    throw new AppError("Muitas tentativas erradas. Entre de novo para receber outro código.", 429, "TOO_MANY_ATTEMPTS");
+  }
+
+  if (record.codeHash !== hashLoginCode(user.id, code)) {
+    await prisma.loginCode.update({ where: { userId: user.id }, data: { attempts: { increment: 1 } } });
+    throw new AppError("Código incorreto. Confira o email e tente de novo.", 400, "INVALID_CODE");
+  }
+
+  // Confere de novo: a conta pode ter sido suspensa nesses minutos
+  if (user.suspendedAt) {
+    throw new AppError(SUSPENDED_MESSAGE, 403, "ACCOUNT_SUSPENDED");
+  }
+
+  // O código é de uso único
+  await prisma.loginCode.delete({ where: { userId: user.id } });
 
   return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };
 }

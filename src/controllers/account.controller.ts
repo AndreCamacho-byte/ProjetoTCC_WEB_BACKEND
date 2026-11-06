@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { AppError } from "../errors/AppError";
 import * as accountService from "../services/account.service";
-import { birthDateSchema } from "../utils/age";
+import { ownBirthDateSchema } from "../utils/age";
 import { usernameField } from "../utils/username";
 
 const MAX_AVATAR_BYTES = 300 * 1024; // o site já manda a foto reduzida (256x256), então isso sobra
@@ -27,7 +27,7 @@ const avatarSchema = z.object({
   image: z.string().regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/, "Envie a foto em JPEG"),
 });
 
-const birthDateBodySchema = z.object({ birthDate: birthDateSchema });
+const birthDateBodySchema = z.object({ birthDate: ownBirthDateSchema });
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Informe a senha atual"),

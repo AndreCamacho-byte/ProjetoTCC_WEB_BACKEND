@@ -4,7 +4,7 @@ import { MIN_AGE, ageStatus } from "../utils/age";
 
 // Protege as rotas de spots/encontros e do marketplace. Use sempre depois do requireAuth:
 //   router.post("/spots", requireAuth, requireMinAge, controller.create)
-// Bloqueia quem tem menos de 12 anos e quem ainda não informou a data de nascimento.
+// Bloqueia quem tem menos de 13 anos e quem ainda não informou a data de nascimento.
 // A data de nascimento vem do banco, carregada pelo requireAuth nesta mesma requisição.
 export const requireMinAge: RequestHandler = (req, _res, next) => {
   const status = ageStatus(req.authUser?.birthDate ?? null);

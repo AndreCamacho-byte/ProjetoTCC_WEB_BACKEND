@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_AGE, ageFrom, ageStatus, birthDateSchema } from "./age";
+import { MIN_AGE, ageFrom, ageStatus, birthDateSchema, ownBirthDateSchema } from "./age";
 
 const date = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
@@ -74,5 +74,30 @@ describe("birthDateSchema", () => {
   it("recusa valores que não são texto", () => {
     expect(isValid(undefined)).toBe(false);
     expect(isValid(20050512)).toBe(false);
+  });
+});
+
+describe("ownBirthDateSchema (cadastro e data informada pela própria pessoa)", () => {
+  const yearsAgoIso = (years: number) => {
+    const d = new Date();
+    return new Date(Date.UTC(d.getUTCFullYear() - years, d.getUTCMonth(), d.getUTCDate())).toISOString().slice(0, 10);
+  };
+
+  it("o site é para maiores de 13 anos", () => {
+    expect(MIN_AGE).toBe(13);
+  });
+
+  it("aceita quem faz 13 anos hoje", () => {
+    expect(ownBirthDateSchema.safeParse(yearsAgoIso(13)).success).toBe(true);
+  });
+
+  it("recusa quem tem menos de 13 anos, com a mensagem certa", () => {
+    const result = ownBirthDateSchema.safeParse(yearsAgoIso(12));
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe("O Clutch é para maiores de 13 anos");
+  });
+
+  it("o administrador continua podendo registrar qualquer data válida", () => {
+    expect(birthDateSchema.safeParse(yearsAgoIso(10)).success).toBe(true);
   });
 });

@@ -5,7 +5,7 @@ import { requireAuth } from "../middlewares/auth";
 
 export const marketRoutes = Router();
 
-// Carrinho e pedidos: só para quem está logado e tem 12 anos ou mais
+// Carrinho e pedidos: só para quem está logado e tem 13 anos ou mais
 const buyer = [requireAuth, requireMinAge];
 
 /**
@@ -269,7 +269,7 @@ marketRoutes.get("/brands", market.listBrands);
  *   put:
  *     tags: [Marketplace]
  *     summary: Salva um produto para ver depois
- *     description: Exige login e 12 anos ou mais. Salvar de novo não dá erro.
+ *     description: Exige login e 13 anos ou mais. Salvar de novo não dá erro.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -314,7 +314,7 @@ marketRoutes.delete("/products/:id/save", buyer, market.unsaveProduct);
  *   get:
  *     tags: [Marketplace]
  *     summary: Produtos que você salvou e que ainda estão na loja
- *     description: Exige login e 12 anos ou mais.
+ *     description: Exige login e 13 anos ou mais.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -334,7 +334,7 @@ marketRoutes.get("/saved/products", buyer, market.listSavedProducts);
  *   get:
  *     tags: [Marketplace]
  *     summary: Carrinho de quem está logado
- *     description: Exige login e 12 anos ou mais.
+ *     description: Exige login e 13 anos ou mais.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -344,7 +344,7 @@ marketRoutes.get("/saved/products", buyer, market.listSavedProducts);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Cart' }
  *       403:
- *         description: Menor de 12 anos ou idade não verificada
+ *         description: Menor de 13 anos ou idade não verificada
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }

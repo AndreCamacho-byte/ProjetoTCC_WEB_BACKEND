@@ -178,6 +178,17 @@ describe("login", () => {
     });
   });
 
+  it("conta antiga de menor de 13 anos não entra (e não gasta email)", async () => {
+    const tenYearsAgo = new Date(Date.UTC(new Date().getUTCFullYear() - 10, 0, 1));
+    prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash, birthDate: tenYearsAgo }));
+
+    await expect(auth.login({ email: "tony@clutch.test", password: "skate1234" })).rejects.toMatchObject({
+      statusCode: 403,
+      code: "UNDERAGE_ACCOUNT",
+    });
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
   it("com a senha certa, manda um código por email e ainda não devolve token", async () => {
     prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
     prisma.loginCode.findUnique.mockResolvedValue(null);

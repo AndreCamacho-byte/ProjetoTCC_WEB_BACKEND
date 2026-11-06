@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/auth";
 import { requireMinAge } from "../middlewares/age";
 import { limits } from "../middlewares/rateLimit";
 
-// Spots no mapa e encontros. Tudo exige login e idade mínima (12 anos), menos a foto do spot:
+// Spots no mapa e encontros. Tudo exige login e idade mínima (13 anos), menos a foto do spot:
 // a tag <img> do site não manda o token.
 export const spotRoutes = Router();
 
@@ -103,7 +103,7 @@ spotRoutes.get("/spots/images/:imageId", spots.getSpotImage);
  *             schema:
  *               type: array
  *               items: { $ref: '#/components/schemas/SpotPin' }
- *       403: { description: Menor de 12 anos ou idade não verificada }
+ *       403: { description: Menor de 13 anos ou idade não verificada }
  *   post:
  *     tags: [Spots]
  *     summary: Sugere um spot

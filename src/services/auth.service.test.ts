@@ -528,3 +528,99 @@ describe("resetPassword", () => {
     expect(prisma.user.update.mock.calls[1][0].data.emailVerifiedAt).toBe(verifiedAt);
   });
 });
+
+describe("lembrar este aparelho", () => {
+  const user = () => makeUser({ passwordHash, tokenVersion: 2 });
+  const device = (overrides = {}) => ({
+    id: "device-1",
+    userId: makeUser().id,
+    tokenHash: sha256("chave-do-aparelho"),
+    tokenVersion: 2,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+    lastUsedAt: new Date(),
+    createdAt: new Date(),
+    ...overrides,
+  });
+  const loginWith = (deviceToken?: string) =>
+    auth.login({ email: "tony@clutch.test", password: "skate1234", deviceToken });
+
+  it("com o aparelho lembrado, a senha certa já entra (sem código e sem email)", async () => {
+    prisma.user.findUnique.mockResolvedValue(user());
+    prisma.trustedDevice.findUnique.mockResolvedValue(device());
+
+    const result = await loginWith("chave-do-aparelho");
+
+    expect(result).toHaveProperty("token");
+    expect(prisma.trustedDevice.findUnique).toHaveBeenCalledWith({ where: { tokenHash: sha256("chave-do-aparelho") } });
+    expect(prisma.trustedDevice.update).toHaveBeenCalled();
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("a chave não dispensa a senha", async () => {
+    prisma.user.findUnique.mockResolvedValue(user());
+    prisma.trustedDevice.findUnique.mockResolvedValue(device());
+    await expect(
+      auth.login({ email: "tony@clutch.test", password: "errada123", deviceToken: "chave-do-aparelho" }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it.each([
+    ["vencida", { expiresAt: new Date(Date.now() - 1000) }],
+    ["de antes da troca de senha", { tokenVersion: 1 }],
+    ["de outra conta", { userId: "outra-conta" }],
+  ])("chave %s volta a pedir o código", async (_, overrides) => {
+    prisma.user.findUnique.mockResolvedValue(user());
+    prisma.trustedDevice.findUnique.mockResolvedValue(device(overrides));
+    prisma.loginCode.findUnique.mockResolvedValue(null);
+
+    const result = await loginWith("chave-do-aparelho");
+
+    expect(result).toMatchObject({ requiresCode: true });
+    expect(sendMailMock).toHaveBeenCalled();
+  });
+
+  it("com remember, o código certo devolve uma chave nova e guarda só o hash", async () => {
+    const u = makeUser({ tokenVersion: 2 });
+    prisma.user.findUnique.mockResolvedValue({
+      ...u,
+      loginCode: {
+        userId: u.id,
+        codeHash: sha256(`login:${u.id}:123456`),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+        createdAt: new Date(),
+      },
+    });
+
+    const result = await auth.verifyLoginCode("tony@clutch.test", "123456", true);
+
+    expect(result).toHaveProperty("deviceToken");
+    const deviceToken = (result as { deviceToken: string }).deviceToken;
+    const { data } = prisma.trustedDevice.create.mock.calls[0][0];
+    expect(data).toMatchObject({ userId: u.id, tokenHash: sha256(deviceToken), tokenVersion: 2 });
+    expect(data.expiresAt.getTime()).toBeGreaterThan(Date.now() + 29 * 24 * 60 * 60_000);
+  });
+
+  it("sem remember, nenhuma chave é criada", async () => {
+    const u = makeUser();
+    prisma.user.findUnique.mockResolvedValue({
+      ...u,
+      loginCode: {
+        userId: u.id,
+        codeHash: sha256(`login:${u.id}:123456`),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+        createdAt: new Date(),
+      },
+    });
+    const result = await auth.verifyLoginCode("tony@clutch.test", "123456");
+    expect(result).not.toHaveProperty("deviceToken");
+    expect(prisma.trustedDevice.create).not.toHaveBeenCalled();
+  });
+
+  it("esquecer aparelhos apaga todos da conta", async () => {
+    prisma.trustedDevice.deleteMany.mockResolvedValue({ count: 3 });
+    expect(await auth.forgetDevices("conta-1")).toEqual({ forgotten: 3 });
+    expect(prisma.trustedDevice.deleteMany).toHaveBeenCalledWith({ where: { userId: "conta-1" } });
+  });
+});

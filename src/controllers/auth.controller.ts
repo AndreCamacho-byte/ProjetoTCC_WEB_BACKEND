@@ -22,6 +22,14 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: emailField,
   password: z.string().min(1, "Informe a senha"),
+  // Chave de "Lembrar este aparelho" (opcional)
+  deviceToken: z.string().max(100).optional(),
+});
+
+const verifyLoginSchema = z.object({
+  email: emailField,
+  code: z.string().trim().regex(/^\d{6}$/, "O código tem 6 dígitos"),
+  remember: z.boolean().default(false),
 });
 
 const verifyEmailSchema = z.object({
@@ -69,8 +77,8 @@ export async function login(req: Request, res: Response) {
 }
 
 export async function verifyLoginCode(req: Request, res: Response) {
-  const { email, code } = verifyCodeSchema.parse(req.body);
-  res.json(await authService.verifyLoginCode(email, code));
+  const { email, code, remember } = verifyLoginSchema.parse(req.body);
+  res.json(await authService.verifyLoginCode(email, code, remember));
 }
 
 export async function verifyEmail(req: Request, res: Response) {

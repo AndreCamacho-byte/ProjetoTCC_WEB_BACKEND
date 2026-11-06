@@ -165,6 +165,14 @@ describe("POST /api/auth/login/verify", () => {
   });
 });
 
+describe("POST /api/auth/login/verify com remember", () => {
+  it("só aceita verdadeiro ou falso", async () => {
+    const res = await request(app).post("/api/auth/login/verify").send({ email: "tony@clutch.test", code: "123456", remember: "sim" });
+    expect(res.status).toBe(400);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /api/auth/verify-code", () => {
   it.each(["12345", "1234567", "12a456", ""])("recusa o código mal formatado %j", async (code) => {
     const res = await request(app).post("/api/auth/verify-code").send({ email: "tony@clutch.test", code });
@@ -329,6 +337,7 @@ describe("configurações da conta", () => {
   it("exigem login", async () => {
     expect((await request(app).patch("/api/users/me").send({ name: "X Y" })).status).toBe(401);
     expect((await request(app).put("/api/users/me/avatar").send({ image: "x" })).status).toBe(401);
+    expect((await request(app).delete("/api/users/me/devices")).status).toBe(401);
     expect((await request(app).delete("/api/users/me").send({ password: "x" })).status).toBe(401);
   });
 

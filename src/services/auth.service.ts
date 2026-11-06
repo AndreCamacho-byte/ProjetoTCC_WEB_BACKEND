@@ -14,7 +14,7 @@ import { limits } from "../middlewares/rateLimit";
 import { UNDERAGE_MESSAGE, ageStatus } from "../utils/age";
 
 type RegisterInput = { name: string; username: string; email: string; password: string; birthDate: Date };
-type LoginInput = { email: string; password: string };
+type LoginInput = { email: string; password: string; deviceToken?: string };
 
 // Nunca devolve o hash da senha (nem o controle interno de sessões) para o cliente
 export type PublicUser = Omit<User, "passwordHash" | "tokenVersion">;
@@ -254,7 +254,7 @@ export async function resetPassword(token: string, password: string) {
 // Hash usado quando o email não existe, só para a conferência da senha levar o mesmo tempo
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("senha-de-uma-conta-que-nao-existe", 10);
 
-export async function login({ email, password }: LoginInput) {
+export async function login({ email, password, deviceToken }: LoginInput) {
   const user = await prisma.user.findUnique({ where: { email } });
 
   // A senha é conferida mesmo quando o email não existe (contra um hash qualquer). Sem isso a
@@ -276,6 +276,11 @@ export async function login({ email, password }: LoginInput) {
   // Contas antigas de menores de 13 anos (de antes de a idade mínima valer para o site todo)
   if (ageStatus(user.birthDate) === "UNDERAGE") {
     throw new AppError(UNDERAGE_MESSAGE, 403, "UNDERAGE_ACCOUNT");
+  }
+
+  // Aparelho lembrado: a senha certa basta, sem código (e sem gastar email)
+  if (deviceToken && (await useTrustedDevice(user, deviceToken))) {
+    return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };
   }
 
   // A senha está certa, mas o login só termina com o código enviado por email (segunda etapa)
@@ -317,8 +322,60 @@ async function sendLoginCode(user: User) {
   }
 }
 
-// Segunda etapa do login: confere o código e devolve o token
-export async function verifyLoginCode(email: string, code: string) {
+// ---------- Aparelhos lembrados ----------
+
+const TRUSTED_DEVICE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const MAX_TRUSTED_DEVICES = 10; // por conta: o mais antigo sai quando passa disso
+
+// A chave do aparelho vale para a conta dona, até vencer e enquanto a senha não mudar
+// (trocar ou redefinir a senha aumenta o tokenVersion e todos os aparelhos são esquecidos)
+async function useTrustedDevice(user: User, deviceToken: string) {
+  const device = await prisma.trustedDevice.findUnique({ where: { tokenHash: hashToken(deviceToken) } });
+  const valid =
+    device &&
+    device.userId === user.id &&
+    device.tokenVersion === user.tokenVersion &&
+    device.expiresAt.getTime() > Date.now();
+  if (!valid) return false;
+  await prisma.trustedDevice.update({ where: { id: device.id }, data: { lastUsedAt: new Date() } });
+  return true;
+}
+
+// Cria a chave do aparelho e devolve ela (só aqui ela existe sem hash)
+async function rememberDevice(user: User) {
+  const deviceToken = crypto.randomBytes(32).toString("base64url");
+  // Apaga os vencidos e os de senhas antigas, e deixa espaço para o novo
+  await prisma.trustedDevice.deleteMany({
+    where: { userId: user.id, OR: [{ expiresAt: { lt: new Date() } }, { tokenVersion: { not: user.tokenVersion } }] },
+  });
+  const kept = await prisma.trustedDevice.findMany({
+    where: { userId: user.id },
+    orderBy: { lastUsedAt: "desc" },
+    select: { id: true },
+  });
+  if (kept.length >= MAX_TRUSTED_DEVICES) {
+    await prisma.trustedDevice.deleteMany({ where: { id: { in: kept.slice(MAX_TRUSTED_DEVICES - 1).map((d) => d.id) } } });
+  }
+  await prisma.trustedDevice.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(deviceToken),
+      tokenVersion: user.tokenVersion,
+      expiresAt: new Date(Date.now() + TRUSTED_DEVICE_TTL_MS),
+    },
+  });
+  return deviceToken;
+}
+
+// Esquece todos os aparelhos da conta (botão em /conta)
+export async function forgetDevices(userId: string) {
+  const { count } = await prisma.trustedDevice.deleteMany({ where: { userId } });
+  return { forgotten: count };
+}
+
+// Segunda etapa do login: confere o código e devolve o token.
+// Com remember, também devolve a chave do aparelho para os próximos logins dispensarem o código.
+export async function verifyLoginCode(email: string, code: string, remember = false) {
   const user = await prisma.user.findUnique({ where: { email }, include: { loginCode: true } });
   const record = user?.loginCode;
 
@@ -344,7 +401,8 @@ export async function verifyLoginCode(email: string, code: string) {
   // O código é de uso único
   await prisma.loginCode.delete({ where: { userId: user.id } });
 
-  return { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };
+  const session = { user: toPublicUser(await promoteIfAdmin(user)), token: signToken(user) };
+  return remember ? { ...session, deviceToken: await rememberDevice(user) } : session;
 }
 
 export async function getUserById(id: string) {

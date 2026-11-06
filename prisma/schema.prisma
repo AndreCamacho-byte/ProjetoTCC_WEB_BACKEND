@@ -56,6 +56,7 @@ model User {
   verificationTokens  EmailVerificationToken[]
   passwordResetTokens PasswordResetToken[]
   loginCode           LoginCode?
+  trustedDevices      TrustedDevice[]
   avatar              UserAvatar?
   posts               Post[]
   comments            Comment[]
@@ -105,6 +106,23 @@ model LoginCode {
   createdAt DateTime @default(now())
 
   @@map("login_codes")
+}
+
+// Aparelho lembrado ("Lembrar este aparelho por 30 dias"): com ele, o login pede só email e
+// senha, sem o código por email. Guarda só o hash da chave. Vale enquanto a senha não mudar
+// (tokenVersion igual ao da conta) e até expiresAt.
+model TrustedDevice {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String   @unique
+  tokenVersion Int
+  expiresAt    DateTime
+  lastUsedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@map("trusted_devices")
 }
 
 // Foto de perfil, guardada no banco (JPEG pequeno, já recortado pelo site).

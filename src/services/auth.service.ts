@@ -57,8 +57,12 @@ const hashToken = (token: string) => crypto.createHash("sha256").update(token).d
 // O id do usuário entra no hash para o mesmo código não gerar o mesmo hash em contas diferentes
 const hashCode = (userId: string, code: string) => hashToken(`${userId}:${code}`);
 
+// Avisada quando o servidor de email não aceitou o envio (fora do ar, senha errada, cota estourada)
+const emailFailed = () =>
+  new AppError("Não conseguimos enviar o email agora. Tente de novo em alguns minutos.", 503, "EMAIL_FAILED");
+
 // Cria um link e um código novos (invalidando os anteriores) e envia o email.
-// Se o envio falhar, a conta continua criada: a pessoa pode pedir o reenvio depois.
+// Devolve se o email saiu: o cadastro avisa quando não saiu; o reenvio responde sempre igual.
 async function sendVerificationEmail(user: User, appUrl: string) {
   const token = crypto.randomBytes(32).toString("base64url");
   const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
@@ -78,8 +82,10 @@ async function sendVerificationEmail(user: User, appUrl: string) {
   const link = `${appUrl}/confirmar-email?token=${token}`;
   try {
     await sendMail({ to: { email: user.email, name: user.name }, ...verifyEmailTemplate({ name: user.name, link, code }) });
+    return true;
   } catch (error) {
     console.error("Falha ao enviar o email de confirmação:", error);
+    return false;
   }
 }
 
@@ -117,7 +123,11 @@ export async function register({ name, username, email, password, birthDate }: R
         data: { name, email, birthDate, passwordHash, username, usernameChosen: true },
       });
 
-  await sendVerificationEmail(user, appUrl);
+  // Se o email não saiu, avisa em vez de dizer que enviou. O cadastro fica pendente e é
+  // substituído quando a pessoa tentar de novo.
+  if (!(await sendVerificationEmail(user, appUrl))) {
+    throw emailFailed();
+  }
 
   // Sem token de login: a pessoa só entra depois de confirmar o email
   return { email: user.email, message: "Conta criada. Enviamos um código de confirmação para o seu email." };
@@ -283,7 +293,7 @@ async function sendLoginCode(user: User) {
     return;
   }
 
-  // Conta no teto diário de emails do site (cota do Brevo). Só chega aqui com a senha certa,
+  // Conta no teto diário de emails do site (cota do Gmail). Só chega aqui com a senha certa,
   // então tentativas de senha errada não gastam a cota.
   limits.dailyEmails.consume("site-inteiro");
 
@@ -295,6 +305,9 @@ async function sendLoginCode(user: User) {
     await sendMail({ to: { email: user.email, name: user.name }, ...loginCodeTemplate({ name: user.name, code }) });
   } catch (error) {
     console.error("Falha ao enviar o código de login:", error);
+    // Apaga o código que não chegou (senão o "reenviar" esperaria 1 minuto à toa) e avisa a pessoa
+    await prisma.loginCode.delete({ where: { userId: user.id } }).catch(() => {});
+    throw emailFailed();
   }
 }
 

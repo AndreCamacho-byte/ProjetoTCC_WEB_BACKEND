@@ -4,6 +4,7 @@
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = "postgresql://teste:teste@localhost:5432/teste";
 process.env.JWT_SECRET = "segredo-usado-apenas-nos-testes-automatizados-0123456789";
-process.env.BREVO_API_KEY = "";
+process.env.SMTP_USER = "";
+process.env.SMTP_PASS = "";
 process.env.ADMIN_EMAILS = "admin@clutch.test";
 process.env.APP_URL = "";

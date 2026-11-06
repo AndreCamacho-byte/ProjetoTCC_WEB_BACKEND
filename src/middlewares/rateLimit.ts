@@ -102,7 +102,7 @@ export const limits = {
   emailRequest: rateLimit({ name: "emailRequest", windowMs: 15 * MINUTE, max: 10 }),
   // Uso de códigos e links (confirmar email, criar nova senha)
   tokenUse: rateLimit({ name: "tokenUse", windowMs: 15 * MINUTE, max: 30 }),
-  // Teto do site inteiro para rotas que enviam email: o plano gratuito do Brevo tem 300 por dia,
+  // Teto do site inteiro para rotas que enviam email: o Gmail aceita uns 500 por dia,
   // e sem isso bastaria alguém disparar cadastros para travar o envio de todo mundo
   dailyEmails: rateLimit({
     name: "dailyEmails",

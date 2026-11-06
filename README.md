@@ -25,7 +25,7 @@ Ficam no arquivo `.env` (modelo em `.env.example`). Esse arquivo nunca vai para 
 |---|---|
 | `DATABASE_URL` | Conexão com o PostgreSQL (Aiven) |
 | `JWT_SECRET` | Chave que assina os tokens de login |
-| `BREVO_API_KEY` e `MAIL_FROM_EMAIL` | Envio de emails pelo Brevo. Sem a chave, o email aparece só no terminal |
+| `SMTP_USER` e `SMTP_PASS` | Envio de emails pelo Gmail do projeto (senha de app do Google). Sem eles, o email aparece só no terminal |
 | `ADMIN_EMAILS` | Emails (separados por vírgula) das contas que são administradoras |
 | `PORT`, `CORS_ORIGIN`, `APP_URL` | Opcionais |
 

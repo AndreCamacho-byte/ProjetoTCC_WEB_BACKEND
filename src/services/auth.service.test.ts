@@ -137,11 +137,11 @@ describe("register", () => {
     expect(saved.codeHash).toBe(sha256(`${saved.userId}:${code}`));
   });
 
-  it("continua criando a conta mesmo se o envio do email falhar", async () => {
+  it("avisa quando o email não sai, em vez de dizer que enviou", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    sendMailMock.mockRejectedValueOnce(new Error("Brevo fora do ar"));
+    sendMailMock.mockRejectedValueOnce(new Error("servidor de email fora do ar"));
 
-    await expect(auth.register(input, APP_URL)).resolves.toMatchObject({ email: "tony.hawk@clutch.test" });
+    await expect(auth.register(input, APP_URL)).rejects.toMatchObject({ statusCode: 503, code: "EMAIL_FAILED" });
   });
 });
 
@@ -206,6 +206,20 @@ describe("login", () => {
 
     expect(prisma.loginCode.upsert).not.toHaveBeenCalled();
     expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("se o código não sai por email, apaga o código e avisa", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    prisma.user.findUnique.mockResolvedValue(makeUser({ passwordHash }));
+    prisma.loginCode.findUnique.mockResolvedValue(null);
+    prisma.loginCode.delete.mockResolvedValue({});
+    sendMailMock.mockRejectedValueOnce(new Error("servidor de email fora do ar"));
+
+    await expect(auth.login({ email: "tony@clutch.test", password: "skate1234" })).rejects.toMatchObject({
+      statusCode: 503,
+      code: "EMAIL_FAILED",
+    });
+    expect(prisma.loginCode.delete).toHaveBeenCalledWith({ where: { userId: makeUser().id } });
   });
 
   it("senha errada não gera código nem email", async () => {

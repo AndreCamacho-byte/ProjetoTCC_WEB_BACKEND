@@ -11,8 +11,17 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("*"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 
-  // Envio de emails pelo Brevo. Sem a chave, o link de confirmação só aparece no terminal.
-  BREVO_API_KEY: z.string().optional(),
+  // Envio de emails por SMTP (o Gmail do projeto, com uma "senha de app" do Google).
+  // Sem SMTP_USER/SMTP_PASS (ex.: no seu computador), o email só aparece no terminal.
+  SMTP_HOST: z.string().default("smtp.gmail.com"),
+  SMTP_PORT: z.coerce.number().default(465),
+  SMTP_USER: z.string().optional(),
+  // A senha de app do Google vem em blocos ("abcd efgh ijkl mnop"): os espaços são tirados
+  SMTP_PASS: z
+    .string()
+    .optional()
+    .transform((value) => value?.replace(/\s+/g, "") || undefined),
+  // Remetente. Vazio = o próprio SMTP_USER (o Gmail só aceita enviar como a própria conta)
   MAIL_FROM_EMAIL: z.string().optional(),
   MAIL_FROM_NAME: z.string().default("Clutch"),
   // Endereço do site usado nos links dos emails (ex.: http://13.219.234.57).
@@ -33,9 +42,9 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-if (parsed.data.BREVO_API_KEY && !parsed.data.MAIL_FROM_EMAIL) {
-  console.error("❌ MAIL_FROM_EMAIL é obrigatório quando BREVO_API_KEY está preenchida");
-  process.exit(1);
+// Só um dos dois preenchido: a API sobe mesmo assim, mas os emails ficam só no log até completar
+if (Boolean(parsed.data.SMTP_USER) !== Boolean(parsed.data.SMTP_PASS)) {
+  console.warn("⚠️  Preencha SMTP_USER e SMTP_PASS juntos. Enquanto isso, os emails aparecem só no terminal.");
 }
 
 export const env = parsed.data;

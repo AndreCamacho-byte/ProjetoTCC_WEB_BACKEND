@@ -23,7 +23,7 @@ const buyer = [requireAuth, requireMinAge];
  *         category: { type: string, enum: [ROUPA, CALCADO, SHAPE, SKATE_MONTADO, PECAS, ACESSORIO, OUTRO] }
  *         details:
  *           type: array
- *           description: Ficha de detalhes (ex.: Madeira, Estado, Rodas)
+ *           description: 'Ficha de detalhes (ex.: Madeira, Estado, Rodas)'
  *           items:
  *             type: object
  *             properties:

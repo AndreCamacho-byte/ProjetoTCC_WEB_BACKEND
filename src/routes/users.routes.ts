@@ -125,7 +125,7 @@ usersRoutes.patch("/users/me/password", requireAuth, limits.login, accountContro
  *     summary: Informa a data de nascimento (contas criadas antes de o cadastro pedir)
  *     description: |
  *       Só pode ser informada uma vez; depois disso, apenas um administrador altera.
- *       É o que libera os spots e o marketplace para quem tem 12 anos ou mais.
+ *       É o que libera os spots e o marketplace para quem tem 13 anos ou mais.
  *     security:
  *       - bearerAuth: []
  *     requestBody:

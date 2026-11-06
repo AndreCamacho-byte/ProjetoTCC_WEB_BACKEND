@@ -27,7 +27,7 @@ export const authRoutes = Router();
  *           type: string
  *           format: date-time
  *           nullable: true
- *           description: Data de nascimento. Nula nas contas antigas (idade não verificada). Menores de 12 anos e contas sem data não acessam spots nem o marketplace.
+ *           description: Data de nascimento. Nula nas contas antigas (idade não verificada). Menores de 13 anos e contas sem data não acessam spots nem o marketplace.
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
  *     AuthResponse:

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { describe, expect, it, vi } from "vitest";
+import { MIN_AGE } from "../utils/age";
 import { requireMinAge } from "./age";
 
 const res = {} as Response;
@@ -13,14 +14,14 @@ const yearsAgo = (years: number) => {
 const requestBornOn = (birthDate: Date | null) => ({ authUser: { role: "USER", birthDate } }) as Request;
 
 describe("requireMinAge", () => {
-  it("libera quem tem 12 anos ou mais", () => {
+  it("libera quem tem a idade mínima (13 anos) ou mais", () => {
     const next = vi.fn();
-    requireMinAge(requestBornOn(yearsAgo(12)), res, next);
+    requireMinAge(requestBornOn(yearsAgo(MIN_AGE)), res, next);
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("bloqueia menores de 12 anos", () => {
-    expect(() => requireMinAge(requestBornOn(yearsAgo(11)), res, vi.fn())).toThrowError(
+  it("bloqueia quem tem menos que a idade mínima", () => {
+    expect(() => requireMinAge(requestBornOn(yearsAgo(MIN_AGE - 1)), res, vi.fn())).toThrowError(
       expect.objectContaining({ statusCode: 403, code: "AGE_RESTRICTED" }),
     );
   });

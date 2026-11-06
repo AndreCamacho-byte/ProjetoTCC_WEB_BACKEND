@@ -11,6 +11,7 @@ import { sendMail } from "../lib/mail";
 import { prisma } from "../lib/prisma";
 import { SUSPENDED_MESSAGE } from "../middlewares/auth";
 import { limits } from "../middlewares/rateLimit";
+import { UNDERAGE_MESSAGE, ageStatus } from "../utils/age";
 
 type RegisterInput = { name: string; username: string; email: string; password: string; birthDate: Date };
 type LoginInput = { email: string; password: string };
@@ -270,6 +271,11 @@ export async function login({ email, password }: LoginInput) {
 
   if (user.suspendedAt) {
     throw new AppError(SUSPENDED_MESSAGE, 403, "ACCOUNT_SUSPENDED");
+  }
+
+  // Contas antigas de menores de 13 anos (de antes de a idade mínima valer para o site todo)
+  if (ageStatus(user.birthDate) === "UNDERAGE") {
+    throw new AppError(UNDERAGE_MESSAGE, 403, "UNDERAGE_ACCOUNT");
   }
 
   // A senha está certa, mas o login só termina com o código enviado por email (segunda etapa)

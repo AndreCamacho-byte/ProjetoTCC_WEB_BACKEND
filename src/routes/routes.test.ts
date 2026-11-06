@@ -70,6 +70,16 @@ describe("POST /api/auth/register", () => {
     expect(res.body.details[0].field).toBe("birthDate");
   });
 
+  it("recusa cadastro de quem tem menos de 13 anos", async () => {
+    const twelve = `${new Date().getUTCFullYear() - 12}-01-01`;
+    const res = await request(app).post("/api/auth/register").send({ ...valid, birthDate: `${new Date().getUTCFullYear() - 11}-12-31` });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0]).toMatchObject({ field: "birthDate", message: "O Clutch é para maiores de 13 anos" });
+    // Exatamente 12 anos completos também não entra
+    expect((await request(app).post("/api/auth/register").send({ ...valid, birthDate: twelve })).status).toBe(400);
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
   it("cria a conta, normaliza o email e não devolve token", async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockImplementation(async ({ data }) => makeUser({ ...data, emailVerifiedAt: null }));

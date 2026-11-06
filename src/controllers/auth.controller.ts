@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { env } from "../config/env";
 import * as authService from "../services/auth.service";
-import { birthDateSchema } from "../utils/age";
+import { ownBirthDateSchema } from "../utils/age";
 import { usernameField } from "../utils/username";
 
 // Primeiro tira os espaços e passa para minúsculas, só depois confere o formato
@@ -16,7 +16,7 @@ const registerSchema = z.object({
   username: usernameField,
   email: emailField,
   password: passwordField,
-  birthDate: birthDateSchema,
+  birthDate: ownBirthDateSchema,
 });
 
 const loginSchema = z.object({

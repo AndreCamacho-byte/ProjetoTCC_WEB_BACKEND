@@ -318,7 +318,7 @@ describe("perfis e seguidores", () => {
 
   it("a busca ignora contas suspensas e não confirmadas", async () => {
     prisma.user.findMany.mockResolvedValue([]);
-    await profiles.searchProfiles("tony");
+    await profiles.searchProfiles("tony", me);
     expect(prisma.user.findMany.mock.calls[0][0]).toMatchObject({
       where: { suspendedAt: null, emailVerifiedAt: { not: null } },
       take: 20,

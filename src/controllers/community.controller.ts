@@ -126,7 +126,7 @@ export async function deleteComment(req: Request, res: Response) {
 
 export async function searchProfiles(req: Request, res: Response) {
   const { search } = z.object({ search: z.string().trim().min(1, "Digite um nome").max(60) }).parse(req.query);
-  res.json(await profiles.searchProfiles(search.replace(/^@/, "")));
+  res.json(await profiles.searchProfiles(search.replace(/^@/, ""), viewerOf(req)));
 }
 
 export async function getProfile(req: Request, res: Response) {

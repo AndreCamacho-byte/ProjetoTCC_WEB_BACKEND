@@ -19,6 +19,7 @@ export const swaggerSpec = swaggerJsdoc({
       { name: "Users", description: "Configurações da conta, foto de perfil, perfis e seguidores" },
       { name: "Posts", description: "Feed, curtidas e comentários" },
       { name: "Chat", description: "Conversas e mensagens entre amigos (pessoas que se seguem)" },
+      { name: "Moderação", description: "Denúncias e bloqueios" },
       { name: "Spots", description: "Spots no mapa e encontros" },
       { name: "Marketplace", description: "Marcas, produtos, carrinho e pedidos" },
     ],

@@ -72,6 +72,10 @@ model User {
   conversationsA      Conversation[]           @relation("conversationUserA")
   conversationsB      Conversation[]           @relation("conversationUserB")
   messages            Message[]
+  reportsMade         Report[]                 @relation("reporter")
+  reportsReceived     Report[]                 @relation("reportedUser")
+  blocking            Block[]                  @relation("blocker")
+  blockedBy           Block[]                  @relation("blocked")
 
   @@map("users")
 }
@@ -520,4 +524,69 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+// ==========================================
+// MODERAÇÃO: DENÚNCIAS E BLOQUEIOS
+// ==========================================
+
+enum ReportTarget {
+  POST
+  COMMENT
+  USER
+  MESSAGE
+}
+
+enum ReportReason {
+  SPAM
+  OFENSA
+  ASSEDIO
+  CONTEUDO_IMPROPRIO
+  RISCO
+  OUTRO
+}
+
+enum ReportStatus {
+  ABERTA
+  RESOLVIDA
+  DESCARTADA
+}
+
+// Denúncia de um post, comentário, perfil ou mensagem. Guarda uma cópia do texto denunciado
+// (excerpt): a equipe vê o que foi denunciado mesmo se o autor apagar depois.
+model Report {
+  id             String       @id @default(uuid())
+  // Quem denunciou (fica nulo se a conta for apagada; a denúncia continua para a equipe)
+  reporterId     String?
+  reporter       User?        @relation("reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  targetType     ReportTarget
+  targetId       String
+  // Dono do conteúdo denunciado (ou a própria pessoa, na denúncia de perfil)
+  reportedUserId String?
+  reportedUser   User?        @relation("reportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  reason         ReportReason
+  details        String?
+  excerpt        String?
+  status         ReportStatus @default(ABERTA)
+  resolvedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  // A mesma pessoa não denuncia a mesma coisa duas vezes
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt])
+  @@map("reports")
+}
+
+// Bloqueio: quem bloqueou não aparece para quem foi bloqueado (perfil, posts, comentários),
+// e os dois deixam de se seguir (o chat, que é só entre amigos, para junto).
+model Block {
+  blockerId String
+  blocker   User     @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
 }

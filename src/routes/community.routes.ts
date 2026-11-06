@@ -35,6 +35,7 @@ export const communityRoutes = Router();
  *         likedByMe: { type: boolean }
  *         savedByMe: { type: boolean, description: Se quem está vendo salvou o post }
  *         canDelete: { type: boolean, description: Verdadeiro para o autor e para administradores }
+ *         isMine: { type: boolean, description: O post é de quem está vendo (sem botão de denunciar) }
  *     PostPage:
  *       type: object
  *       properties:
@@ -50,6 +51,7 @@ export const communityRoutes = Router();
  *         createdAt: { type: string, format: date-time }
  *         author: { $ref: '#/components/schemas/Author' }
  *         canDelete: { type: boolean, description: Verdadeiro para quem escreveu, para o dono do post e para administradores }
+ *         isMine: { type: boolean, description: O comentário é de quem está vendo }
  *     Profile:
  *       allOf:
  *         - $ref: '#/components/schemas/Author'
@@ -63,6 +65,7 @@ export const communityRoutes = Router();
  *             followedByMe: { type: boolean }
  *             followsMe: { type: boolean, description: A pessoa segue quem está vendo. Os dois verdadeiros = amigos. }
  *             isMe: { type: boolean }
+ *             blockedByMe: { type: boolean, description: Quem está vendo bloqueou esta pessoa }
  */
 
 /**

@@ -118,6 +118,7 @@ export const prisma = {
     update: vi.fn(),
   },
   message: {
+    findUnique: vi.fn(),
     findFirst: vi.fn(),
     findMany: vi.fn(),
     count: vi.fn(),
@@ -149,6 +150,18 @@ export const prisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     deleteMany: vi.fn(),
+  },
+  // Sem bloqueios, a não ser que o teste diga outra coisa
+  block: {
+    findMany: vi.fn(async (): Promise<unknown[]> => []),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  report: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    update: vi.fn(),
   },
   // Uma transação com lista só espera todas as operações terminarem;
   // com função, roda a função passando o próprio Prisma simulado.

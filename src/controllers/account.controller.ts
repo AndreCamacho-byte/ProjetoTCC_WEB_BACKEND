@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { AppError } from "../errors/AppError";
 import * as accountService from "../services/account.service";
+import { forgetDevices as forgetAllDevices } from "../services/auth.service";
 import { ownBirthDateSchema } from "../utils/age";
 import { usernameField } from "../utils/username";
 
@@ -90,4 +91,9 @@ export async function deleteAccount(req: Request, res: Response) {
   const { password } = deleteSchema.parse(req.body);
   await accountService.deleteAccount(req.userId!, password);
   res.status(204).end();
+}
+
+// "Esquecer aparelhos": o próximo login em qualquer aparelho volta a pedir o código
+export async function forgetDevices(req: Request, res: Response) {
+  res.json(await forgetAllDevices(req.userId!));
 }

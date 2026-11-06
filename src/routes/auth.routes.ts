@@ -35,6 +35,7 @@ export const authRoutes = Router();
  *       properties:
  *         user: { $ref: '#/components/schemas/User' }
  *         token: { type: string, description: JWT para enviar no header Authorization }
+ *         deviceToken: { type: string, description: "Só no login com remember: guarde e mande no próximo POST /auth/login" }
  *     LoginChallenge:
  *       type: object
  *       description: Senha correta. Falta digitar o código enviado por email (POST /auth/login/verify).
@@ -117,6 +118,8 @@ authRoutes.post("/auth/register", limits.register, limits.dailyEmails, authContr
  *       Com a senha certa, envia um código de 6 dígitos para o email da conta (vale 10 minutos) e responde
  *       requiresCode. O token só sai na segunda etapa, POST /auth/login/verify.
  *       Pedir de novo em menos de 1 minuto não envia outro email (o código anterior continua valendo).
+ *       Com um deviceToken válido (aparelho lembrado), o login termina aqui: responde direto com o token,
+ *       sem código e sem email.
  *       Limite de 30 tentativas a cada 15 minutos por endereço IP (resposta 429 ao passar).
  *     requestBody:
  *       required: true
@@ -128,12 +131,16 @@ authRoutes.post("/auth/register", limits.register, limits.dailyEmails, authContr
  *             properties:
  *               email: { type: string, format: email, example: tony@clutch.com }
  *               password: { type: string, format: password, example: skate1234 }
+ *               deviceToken: { type: string, description: 'Chave de "Lembrar este aparelho" (opcional)' }
  *     responses:
  *       200:
- *         description: Senha correta, código enviado por email
+ *         description: Senha correta. Código enviado por email (LoginChallenge) ou, com aparelho lembrado, login feito (AuthResponse).
  *         content:
  *           application/json:
- *             schema: { $ref: '#/components/schemas/LoginChallenge' }
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/LoginChallenge'
+ *                 - $ref: '#/components/schemas/AuthResponse'
  *       400:
  *         description: Dados inválidos
  *         content:
@@ -162,7 +169,10 @@ authRoutes.post("/auth/login", limits.login, authController.login);
  *   post:
  *     tags: [Auth]
  *     summary: Segunda etapa do login (código do email) e devolve o token JWT
- *     description: O código vale 10 minutos, uma vez só, com até 5 tentativas.
+ *     description: |
+ *       O código vale 10 minutos, uma vez só, com até 5 tentativas.
+ *       Com remember = true, a resposta também traz deviceToken: mandado no próximo POST /auth/login,
+ *       dispensa o código por 30 dias (ou até a senha mudar).
  *     requestBody:
  *       required: true
  *       content:
@@ -173,9 +183,10 @@ authRoutes.post("/auth/login", limits.login, authController.login);
  *             properties:
  *               email: { type: string, format: email }
  *               code: { type: string, example: '123456' }
+ *               remember: { type: boolean, description: Lembrar este aparelho por 30 dias }
  *     responses:
  *       200:
- *         description: Login realizado
+ *         description: Login realizado (com deviceToken quando remember = true)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/AuthResponse' }

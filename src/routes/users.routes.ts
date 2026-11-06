@@ -74,6 +74,27 @@ usersRoutes.delete("/users/me", requireAuth, accountController.deleteAccount);
 
 /**
  * @openapi
+ * /users/me/devices:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Esquece todos os aparelhos lembrados
+ *     description: Depois disso, o próximo login em qualquer aparelho volta a pedir o código por email.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Quantos aparelhos foram esquecidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 forgotten: { type: integer, example: 2 }
+ */
+usersRoutes.delete("/users/me/devices", requireAuth, accountController.forgetDevices);
+
+/**
+ * @openapi
  * /users/me/password:
  *   patch:
  *     tags: [Users]

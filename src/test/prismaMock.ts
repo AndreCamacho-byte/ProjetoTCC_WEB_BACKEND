@@ -34,6 +34,13 @@ export const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  trustedDevice: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(async (): Promise<unknown[]> => []),
+    create: vi.fn(),
+    update: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   userAvatar: {
     findUnique: vi.fn(),
     upsert: vi.fn(),

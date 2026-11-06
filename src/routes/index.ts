@@ -7,6 +7,7 @@ import { chatRoutes } from "./chat.routes";
 import { communityRoutes } from "./community.routes";
 import { healthRoutes } from "./health.routes";
 import { marketRoutes } from "./market.routes";
+import { reportRoutes } from "./report.routes";
 import { spotRoutes } from "./spot.routes";
 import { usersRoutes } from "./users.routes";
 
@@ -19,6 +20,7 @@ routes.use(adminRoutes);
 // Precisam vir depois de adminRoutes, que é quem confere o login de administrador em /admin
 routes.use(adminMarketRoutes);
 routes.use(adminSpotRoutes);
+routes.use(reportRoutes);
 routes.use(usersRoutes);
 routes.use(marketRoutes);
 routes.use(communityRoutes);

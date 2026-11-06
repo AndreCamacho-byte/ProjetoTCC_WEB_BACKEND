@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
+import { blockBetween, notBlocked } from "./block.service";
 import { authorSelect, type Viewer } from "./community.service";
 
 // Perfil público: o que outras pessoas veem. Nada de email, data de nascimento ou função.
@@ -27,12 +28,22 @@ async function followCounts(userId: string, viewerId: string) {
   return { followers, following, posts, followedByMe: mine > 0, followsMe: theirs > 0 };
 }
 
-export async function getProfile(username: string, viewer: Viewer) {
+// Quem bloqueou quem está vendo some para ele: o perfil "não existe"
+async function findVisibleUser(username: string, viewer: Viewer) {
   const user = await findActiveUser(username);
-  return { ...user, ...(await followCounts(user.id, viewer.id)), isMe: user.id === viewer.id };
+  const block = await blockBetween(viewer.id, user.id);
+  if (block.blockedMe) {
+    throw new AppError("Perfil não encontrado", 404);
+  }
+  return { user, blockedByMe: block.blockedByMe };
 }
 
-// Usado pela rota de posts de um perfil
+export async function getProfile(username: string, viewer: Viewer) {
+  const { user, blockedByMe } = await findVisibleUser(username, viewer);
+  return { ...user, ...(await followCounts(user.id, viewer.id)), isMe: user.id === viewer.id, blockedByMe };
+}
+
+// Usado pela rota de posts de um perfil (com bloqueio em qualquer sentido, a lista vem vazia)
 export async function getProfileId(username: string) {
   return (await findActiveUser(username)).id;
 }
@@ -41,6 +52,13 @@ export async function follow(username: string, viewer: Viewer) {
   const user = await findActiveUser(username);
   if (user.id === viewer.id) {
     throw new AppError("Você não pode seguir a si mesmo", 400);
+  }
+  const block = await blockBetween(viewer.id, user.id);
+  if (block.blockedMe) {
+    throw new AppError("Perfil não encontrado", 404);
+  }
+  if (block.blockedByMe) {
+    throw new AppError("Desbloqueie a pessoa para seguir", 400, "BLOCKED");
   }
 
   // Seguir duas vezes não dá erro (o par seguidor + seguido é único)
@@ -69,14 +87,15 @@ export async function listFollows(
   viewer: Viewer,
   { cursor, limit }: ListInput,
 ) {
-  const user = await findActiveUser(username);
+  const { user } = await findVisibleUser(username, viewer);
+  const hidden = await notBlocked(viewer.id);
 
   // Seguidores: as linhas em que a pessoa é seguida; seguindo: as linhas em que ela segue
   const isFollowers = kind === "followers";
   const rows = await prisma.follow.findMany({
     where: isFollowers
-      ? { followingId: user.id, follower: { suspendedAt: null } }
-      : { followerId: user.id, following: { suspendedAt: null } },
+      ? { followingId: user.id, follower: { suspendedAt: null, id: hidden } }
+      : { followerId: user.id, following: { suspendedAt: null, id: hidden } },
     include: { follower: { select: authorSelect }, following: { select: authorSelect } },
     orderBy: [{ createdAt: "desc" }, isFollowers ? { followerId: "desc" } : { followingId: "desc" }],
     take: limit + 1,
@@ -109,8 +128,9 @@ export async function listFollows(
 }
 
 // Busca de pessoas pelo nome ou @ (para encontrar quem seguir)
-export async function searchProfiles(search: string) {
+export async function searchProfiles(search: string, viewer: Viewer) {
   const where: Prisma.UserWhereInput = {
+    id: await notBlocked(viewer.id),
     suspendedAt: null,
     emailVerifiedAt: { not: null },
     OR: [

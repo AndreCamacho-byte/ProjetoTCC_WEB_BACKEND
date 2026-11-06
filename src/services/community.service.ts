@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
+import { notBlocked } from "./block.service";
 
 // Quem está pedindo: o id e se é administrador (administradores podem apagar qualquer post ou comentário)
 export type Viewer = { id: string; isAdmin: boolean };
@@ -16,6 +17,11 @@ export const authorSelect = {
 
 // Contas suspensas somem da comunidade: os posts e comentários delas não aparecem
 export const activeAuthor = { author: { suspendedAt: null } } satisfies Prisma.PostWhereInput;
+
+// Para quem está vendo, também somem os posts e comentários de quem tem bloqueio com ele (em qualquer sentido)
+async function visibleAuthor(viewerId: string) {
+  return { author: { suspendedAt: null, id: await notBlocked(viewerId) } } satisfies Prisma.PostWhereInput;
+}
 
 const postInclude = (viewerId: string) =>
   ({
@@ -47,6 +53,8 @@ export function toPostView(post: PostWithRelations, viewer: Viewer) {
     savedByMe: post.savedBy.length > 0,
     // O site mostra o botão de apagar só para quem pode
     canDelete: viewer.isAdmin || post.authorId === viewer.id,
+    // O que é de quem está vendo não tem o botão de denunciar
+    isMine: post.authorId === viewer.id,
   };
 }
 
@@ -56,7 +64,7 @@ type ListInput = { cursor?: string; limit: number };
 
 async function listPosts(where: Prisma.PostWhereInput, viewer: Viewer, { cursor, limit }: ListInput) {
   const posts = await prisma.post.findMany({
-    where: { ...where, ...activeAuthor },
+    where: { ...where, ...(await visibleAuthor(viewer.id)) },
     include: postInclude(viewer.id),
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
@@ -90,7 +98,7 @@ export async function getPostsByAuthor(authorId: string, viewer: Viewer, input: 
 
 export async function getPost(postId: string, viewer: Viewer) {
   const post = await prisma.post.findFirst({
-    where: { id: postId, ...activeAuthor },
+    where: { id: postId, ...(await visibleAuthor(viewer.id)) },
     include: postInclude(viewer.id),
   });
   if (!post) {
@@ -140,8 +148,11 @@ export async function getPostImage(imageId: string) {
 
 // ---------- Curtidas ----------
 
-async function assertPostVisible(postId: string) {
-  const post = await prisma.post.findFirst({ where: { id: postId, ...activeAuthor }, select: { id: true } });
+async function assertPostVisible(postId: string, viewerId: string) {
+  const post = await prisma.post.findFirst({
+    where: { id: postId, ...(await visibleAuthor(viewerId)) },
+    select: { id: true },
+  });
   if (!post) {
     throw new AppError("Post não encontrado", 404);
   }
@@ -157,7 +168,7 @@ async function likeState(postId: string, userId: string) {
 
 // Curtir duas vezes não dá erro nem conta em dobro (o par pessoa + post é único)
 export async function likePost(postId: string, userId: string) {
-  await assertPostVisible(postId);
+  await assertPostVisible(postId, userId);
   await prisma.like.upsert({
     where: { userId_postId: { userId, postId } },
     create: { userId, postId },
@@ -167,7 +178,7 @@ export async function likePost(postId: string, userId: string) {
 }
 
 export async function unlikePost(postId: string, userId: string) {
-  await assertPostVisible(postId);
+  await assertPostVisible(postId, userId);
   await prisma.like.deleteMany({ where: { postId, userId } });
   return likeState(postId, userId);
 }
@@ -176,7 +187,7 @@ export async function unlikePost(postId: string, userId: string) {
 
 // Salvar duas vezes não dá erro (o par pessoa + post é único)
 export async function savePost(postId: string, userId: string) {
-  await assertPostVisible(postId);
+  await assertPostVisible(postId, userId);
   await prisma.savedPost.upsert({
     where: { userId_postId: { userId, postId } },
     create: { userId, postId },
@@ -193,7 +204,7 @@ export async function unsavePost(postId: string, userId: string) {
 // Posts que a pessoa salvou, do mais recente salvo para o mais antigo
 export async function listSavedPosts(viewer: Viewer, { cursor, limit }: ListInput) {
   const saved = await prisma.savedPost.findMany({
-    where: { userId: viewer.id, post: activeAuthor },
+    where: { userId: viewer.id, post: await visibleAuthor(viewer.id) },
     include: { post: { include: postInclude(viewer.id) } },
     orderBy: [{ createdAt: "desc" }, { postId: "desc" }],
     take: limit + 1,
@@ -222,15 +233,16 @@ function toCommentView(comment: CommentWithRelations, viewer: Viewer) {
     author: comment.author,
     // Quem escreveu, o dono do post e os administradores podem apagar o comentário
     canDelete: viewer.isAdmin || comment.authorId === viewer.id || comment.post.authorId === viewer.id,
+    isMine: comment.authorId === viewer.id,
   };
 }
 
 // Comentários em ordem de chegada (os mais antigos primeiro), como numa conversa
 export async function listComments(postId: string, viewer: Viewer, { cursor, limit }: ListInput) {
-  await assertPostVisible(postId);
+  await assertPostVisible(postId, viewer.id);
 
   const comments = await prisma.comment.findMany({
-    where: { postId, author: { suspendedAt: null } },
+    where: { postId, ...(await visibleAuthor(viewer.id)) },
     include: commentInclude,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: limit + 1,
@@ -247,7 +259,7 @@ export async function listComments(postId: string, viewer: Viewer, { cursor, lim
 }
 
 export async function createComment(postId: string, viewer: Viewer, content: string) {
-  await assertPostVisible(postId);
+  await assertPostVisible(postId, viewer.id);
   const comment = await prisma.comment.create({
     data: { postId, authorId: viewer.id, content },
     include: commentInclude,

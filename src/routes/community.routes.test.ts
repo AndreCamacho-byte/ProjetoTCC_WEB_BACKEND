@@ -272,3 +272,49 @@ describe("conta suspensa", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("denúncias e bloqueios", () => {
+  it.each([
+    ["post", "/api/reports"],
+    ["get", "/api/blocks"],
+    ["post", "/api/profiles/tony/block"],
+    ["delete", "/api/profiles/tony/block"],
+    ["get", "/api/admin/reports"],
+  ] as const)("%s %s exige login", async (method, path) => {
+    expect((await request(app)[method](path)).status).toBe(401);
+  });
+
+  it("só o admin vê a fila de denúncias", async () => {
+    loggedAs();
+    expect((await request(app).get("/api/admin/reports").set(bearer)).status).toBe(403);
+  });
+
+  it("denúncia sem motivo válido é recusada", async () => {
+    loggedAs();
+    const response = await request(app)
+      .post("/api/reports")
+      .set(bearer)
+      .send({ targetType: "POST", targetId: POST_ID, reason: "NAO_EXISTE" });
+    expect(response.status).toBe(400);
+    expect(prisma.report.upsert).not.toHaveBeenCalled();
+  });
+
+  it("envia a denúncia de um post", async () => {
+    loggedAs();
+    prisma.post.findUnique.mockResolvedValue({ authorId: "outra", content: "spam", _count: { images: 0 } });
+    const response = await request(app)
+      .post("/api/reports")
+      .set(bearer)
+      .send({ targetType: "POST", targetId: POST_ID, reason: "SPAM", details: "  link suspeito  " });
+    expect(response.status).toBe(201);
+    expect(prisma.report.upsert.mock.calls[0][0].create).toMatchObject({ reason: "SPAM", details: "link suspeito" });
+  });
+
+  it("o admin muda a situação da denúncia", async () => {
+    loggedAs({ role: "ADMIN" });
+    prisma.report.findUnique.mockResolvedValue({ id: POST_ID });
+    const response = await request(app).patch(`/api/admin/reports/${POST_ID}`).set(bearer).send({ status: "RESOLVIDA" });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: POST_ID, status: "RESOLVIDA" });
+  });
+});

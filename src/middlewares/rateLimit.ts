@@ -148,4 +148,12 @@ export const limits = {
     key: (req) => req.userId ?? clientIp(req),
     message: "Você já criou muitos encontros hoje. Tente de novo amanhã.",
   }),
+  // Denúncias: o bastante para quem usa de verdade, sem deixar alguém encher a fila do admin
+  reporting: rateLimit({
+    name: "reporting",
+    windowMs: 24 * 60 * MINUTE,
+    max: 20,
+    key: (req) => req.userId ?? clientIp(req),
+    message: "Você já fez muitas denúncias hoje. Tente de novo amanhã.",
+  }),
 };

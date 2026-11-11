@@ -35,6 +35,10 @@ const postSchema = z.object({
     .default([]),
 });
 
+const editPostSchema = z.object({
+  content: z.string("Escreva o texto do post").trim().max(MAX_POST_LENGTH, `O post pode ter até ${MAX_POST_LENGTH} caracteres`),
+});
+
 const commentSchema = z.object({
   content: z
     .string("Escreva o comentário")
@@ -58,6 +62,12 @@ export async function createPost(req: Request, res: Response) {
   const { content, images } = postSchema.parse(req.body);
   const data = images.map((image) => jpegFromDataUrl(image, MAX_POST_IMAGE_BYTES));
   res.status(201).json(await community.createPost(viewerOf(req), { content, images: data }));
+}
+
+export async function updatePost(req: Request, res: Response) {
+  const { id } = idParam("id").parse(req.params);
+  const { content } = editPostSchema.parse(req.body);
+  res.json(await community.updatePost(id, viewerOf(req), content));
 }
 
 export async function deletePost(req: Request, res: Response) {

@@ -92,6 +92,7 @@ export const prisma = {
     findMany: vi.fn(),
     count: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
     delete: vi.fn(),
   },
   postImage: {

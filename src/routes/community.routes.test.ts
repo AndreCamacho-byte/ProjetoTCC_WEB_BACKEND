@@ -44,6 +44,7 @@ describe("comunidade exige login", () => {
     ["post", "/api/posts"],
     ["get", `/api/posts/${POST_ID}`],
     ["delete", `/api/posts/${POST_ID}`],
+    ["patch", `/api/posts/${POST_ID}`],
     ["put", `/api/posts/${POST_ID}/like`],
     ["get", `/api/posts/${POST_ID}/comments`],
     ["post", `/api/posts/${POST_ID}/comments`],
@@ -316,5 +317,30 @@ describe("denúncias e bloqueios", () => {
     const response = await request(app).patch(`/api/admin/reports/${POST_ID}`).set(bearer).send({ status: "RESOLVIDA" });
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ id: POST_ID, status: "RESOLVIDA" });
+  });
+});
+
+describe("PATCH /api/posts/:id", () => {
+  it("edita o texto e devolve o post com editedAt", async () => {
+    loggedAs();
+    const editedAt = new Date("2026-10-11T09:00:00.000Z");
+    prisma.post.findUnique.mockResolvedValue({ authorId: USER_ID, content: "Sessão de hoje", _count: { images: 0 } });
+    prisma.post.findFirst.mockResolvedValue({ ...createdPost, content: "Sessão de ontem", editedAt });
+
+    const res = await request(app).patch(`/api/posts/${POST_ID}`).set(bearer).send({ content: "  Sessão de ontem  " });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ content: "Sessão de ontem", editedAt: editedAt.toISOString(), canEdit: true });
+    expect(prisma.post.update).toHaveBeenCalledWith({
+      where: { id: POST_ID },
+      data: { content: "Sessão de ontem", editedAt: expect.any(Date) },
+    });
+  });
+
+  it("recusa texto maior que 500 caracteres e corpo sem texto", async () => {
+    loggedAs();
+    expect((await request(app).patch(`/api/posts/${POST_ID}`).set(bearer).send({ content: "a".repeat(501) })).status).toBe(400);
+    expect((await request(app).patch(`/api/posts/${POST_ID}`).set(bearer).send({})).status).toBe(400);
+    expect(prisma.post.update).not.toHaveBeenCalled();
   });
 });

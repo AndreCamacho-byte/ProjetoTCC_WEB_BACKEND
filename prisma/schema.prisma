@@ -166,6 +166,8 @@ model Post {
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Quando o autor editou o texto pela última vez (o site mostra "editado há ...")
+  editedAt  DateTime?
 
   comments Comment[]
   likes    Like[]

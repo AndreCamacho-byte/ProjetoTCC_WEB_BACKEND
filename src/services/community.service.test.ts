@@ -139,6 +139,54 @@ describe("posts", () => {
   });
 });
 
+describe("editar post", () => {
+  it("só o autor edita; para os outros (até o admin) o post não existe", async () => {
+    prisma.post.findUnique.mockResolvedValue({ authorId: OTHER, content: "antes", _count: { images: 0 } });
+
+    await expect(community.updatePost(POST_ID, me, "novo")).rejects.toMatchObject({ statusCode: 404 });
+    await expect(community.updatePost(POST_ID, admin, "novo")).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.post.update).not.toHaveBeenCalled();
+  });
+
+  it("grava o texto novo com a hora da edição", async () => {
+    prisma.post.findUnique.mockResolvedValue({ authorId: ME, content: "antes", _count: { images: 0 } });
+    const editedAt = new Date("2026-10-11T09:00:00.000Z");
+    prisma.post.findFirst.mockResolvedValue(makePost({ authorId: ME, author: author(ME), content: "depois", editedAt }));
+
+    const post = await community.updatePost(POST_ID, me, "depois");
+
+    expect(prisma.post.update).toHaveBeenCalledWith({
+      where: { id: POST_ID },
+      data: { content: "depois", editedAt: expect.any(Date) },
+    });
+    expect(post).toMatchObject({ content: "depois", editedAt, canEdit: true, canDelete: true });
+  });
+
+  it("texto igual não marca como editado", async () => {
+    prisma.post.findUnique.mockResolvedValue({ authorId: ME, content: "igual", _count: { images: 0 } });
+    prisma.post.findFirst.mockResolvedValue(makePost({ authorId: ME, content: "igual", editedAt: null }));
+
+    await community.updatePost(POST_ID, me, "igual");
+
+    expect(prisma.post.update).not.toHaveBeenCalled();
+  });
+
+  it("post sem foto não pode ficar vazio; com foto, pode", async () => {
+    prisma.post.findUnique.mockResolvedValueOnce({ authorId: ME, content: "antes", _count: { images: 0 } });
+    await expect(community.updatePost(POST_ID, me, "")).rejects.toMatchObject({ statusCode: 400 });
+
+    prisma.post.findUnique.mockResolvedValueOnce({ authorId: ME, content: "antes", _count: { images: 2 } });
+    prisma.post.findFirst.mockResolvedValue(makePost({ authorId: ME, content: "" }));
+    await community.updatePost(POST_ID, me, "");
+    expect(prisma.post.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("quem não é o autor não vê o botão de editar", async () => {
+    prisma.post.findFirst.mockResolvedValue(makePost());
+    expect(await community.getPost(POST_ID, admin)).toMatchObject({ canEdit: false, canDelete: true });
+  });
+});
+
 describe("curtidas", () => {
   it("curtir de novo não conta em dobro", async () => {
     prisma.post.findFirst.mockResolvedValue({ id: POST_ID });

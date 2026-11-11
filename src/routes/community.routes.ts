@@ -29,11 +29,13 @@ export const communityRoutes = Router();
  *           description: Até 4 fotos, na ordem escolhida
  *           items: { type: string, example: /api/posts/images/3f2b... }
  *         createdAt: { type: string, format: date-time }
+ *         editedAt: { type: string, format: date-time, nullable: true, description: Última edição do texto (null se nunca foi editado) }
  *         author: { $ref: '#/components/schemas/Author' }
  *         likeCount: { type: integer, example: 12 }
  *         commentCount: { type: integer, example: 3 }
  *         likedByMe: { type: boolean }
  *         savedByMe: { type: boolean, description: Se quem está vendo salvou o post }
+ *         canEdit: { type: boolean, description: Verdadeiro só para o autor }
  *         canDelete: { type: boolean, description: Verdadeiro para o autor e para administradores }
  *         isMine: { type: boolean, description: O post é de quem está vendo (sem botão de denunciar) }
  *     PostPage:
@@ -193,6 +195,44 @@ communityRoutes.post("/posts", requireAuth, limits.posting, community.createPost
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
+ *   patch:
+ *     tags: [Posts]
+ *     summary: Edita o texto de um post
+ *     description: |
+ *       Só o autor. As fotos não mudam. Post sem foto não pode ficar sem texto.
+ *       Quando o texto muda, o post ganha editedAt (o site mostra "editado há ...").
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content: { type: string, maxLength: 500, example: Sessão de hoje na praça (com foto nova do Dudu)! }
+ *     responses:
+ *       200:
+ *         description: Post atualizado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Post' }
+ *       400:
+ *         description: Texto grande demais, ou post sem foto ficando vazio
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Post não encontrado (ou de outra pessoa)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  *   delete:
  *     tags: [Posts]
  *     summary: Apaga um post
@@ -214,6 +254,7 @@ communityRoutes.post("/posts", requireAuth, limits.posting, community.createPost
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 communityRoutes.get("/posts/:id", requireAuth, community.getPost);
+communityRoutes.patch("/posts/:id", requireAuth, limits.posting, community.updatePost);
 communityRoutes.delete("/posts/:id", requireAuth, community.deletePost);
 
 /**

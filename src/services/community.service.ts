@@ -46,11 +46,14 @@ export function toPostView(post: PostWithRelations, viewer: Viewer) {
     content: post.content,
     imageUrls: post.images.map((image) => postImageUrl(image.id)),
     createdAt: post.createdAt,
+    editedAt: post.editedAt,
     author: post.author,
     likeCount: post._count.likes,
     commentCount: post._count.comments,
     likedByMe: post.likes.length > 0,
     savedByMe: post.savedBy.length > 0,
+    // Editar é só do autor (nem o admin muda o que outra pessoa escreveu)
+    canEdit: post.authorId === viewer.id,
     // O site mostra o botão de apagar só para quem pode
     canDelete: viewer.isAdmin || post.authorId === viewer.id,
     // O que é de quem está vendo não tem o botão de denunciar
@@ -127,6 +130,26 @@ export async function createPost(viewer: Viewer, { content, images = [] }: { con
     include: postInclude(viewer.id),
   });
   return toPostView(post, viewer);
+}
+
+// Só o autor edita o texto do post (as fotos continuam as mesmas). Para os outros, o post "não existe".
+// Post sem foto não pode ficar sem texto.
+export async function updatePost(postId: string, viewer: Viewer, content: string) {
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { authorId: true, content: true, _count: { select: { images: true } } },
+  });
+  if (!post || post.authorId !== viewer.id) {
+    throw new AppError("Post não encontrado", 404);
+  }
+  if (!content && post._count.images === 0) {
+    throw new AppError("Escreva alguma coisa: um post sem foto não pode ficar vazio", 400);
+  }
+  // Sem mudança no texto, nada é gravado (e o post não ganha a marca de "editado")
+  if (content !== post.content) {
+    await prisma.post.update({ where: { id: postId }, data: { content, editedAt: new Date() } });
+  }
+  return getPost(postId, viewer);
 }
 
 // Só o autor ou um administrador (moderação) apagam um post. Para os outros, o post "não existe".

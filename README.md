@@ -1,80 +1,175 @@
-# Clutch — Backend (API)
+<div align="center">
 
-API do **Clutch**, a rede social do skatista: contas, spots e encontros no mapa, comunidade, chat entre amigos e loja de streetwear. Projeto de Trabalho de Conclusão de Curso (turma DS2A, 2026).
+<img src="https://raw.githubusercontent.com/AndreCamacho-byte/ProjetoTCC_WEB_REACTJS/master/public/og-image.jpg" alt="Clutch — for those who shred. A rede social dos skatistas: spots, encontros e streetwear." width="100%">
 
-**Grupo:** André Camacho, Gabriel Neri, Guilherme Sales e Tito Leal.
+# Clutch — API (backend)
+
+**A API da rede social do skatista:** contas, comunidade, chat, loja, spots e encontros.
+
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Aiven-4169E1?logo=postgresql&logoColor=white)
+![Swagger](https://img.shields.io/badge/Swagger-97_rotas-85EA2D?logo=swagger&logoColor=black)
+![Testes](https://img.shields.io/badge/testes-462_passando-2ea44f?logo=vitest&logoColor=white)
+
+Trabalho de Conclusão de Curso · turma DS2A · 2026<br>
+**André Camacho · Gabriel Neri · Guilherme Sales · Tito Leal**
+
+[Arquitetura](#arquitetura) · [Rotas](#rotas) · [Banco de dados](#banco-de-dados) · [Segurança](#segurança) · [Como rodar](#como-rodar) · [Testes](#testes)
+
+</div>
+
+---
+
+## O projeto
+
+O Clutch é uma rede social feita para skatistas, com três frentes: **spots e encontros no mapa**, **comunidade** (feed e chat) e **loja** de streetwear. Este repositório é a **API**: recebe os pedidos do site, aplica as regras do negócio e guarda tudo no banco.
 
 | Repositório | O que é |
 |---|---|
-| [ProjetoTCC_WEB_REACTJS](https://github.com/AndreCamacho-byte/ProjetoTCC_WEB_REACTJS) | Site em React |
-| **ProjetoTCC_WEB_BACKEND** (este) | API e banco de dados |
-| [Terraform_TCC_WEB_REACT](https://github.com/AndreCamacho-byte/Terraform_TCC_WEB_REACT) | Infraestrutura na AWS |
+| [ProjetoTCC_WEB_REACTJS](https://github.com/AndreCamacho-byte/ProjetoTCC_WEB_REACTJS) | Site em React + TypeScript |
+| **ProjetoTCC_WEB_BACKEND** (este) | API em Express, banco PostgreSQL e documentação Swagger |
+| Terraform_TCC_WEB_REACT (privado) | Infraestrutura na AWS, criada por código |
 
-## Tecnologias
+### Em números
 
-Node.js 22 · Express 5 · TypeScript · Prisma 6 · PostgreSQL (Aiven) · Zod · JWT + bcrypt · Nodemailer (Gmail) · Swagger · Vitest + Supertest
-
-## Como rodar
-
-```bash
-npm install
-cp .env.example .env      # preencha a DATABASE_URL do Aiven e o JWT_SECRET
-npm run db:deploy         # cria as tabelas no banco (aplica as migrations)
-npm run dev               # sobe a API e recarrega ao salvar
-```
-
-- API: http://localhost:3000/api
-- Documentação (Swagger): http://localhost:3000/api/docs
-- Status: http://localhost:3000/api/health
-
-Sem `SMTP_USER` e `SMTP_PASS`, nenhum email é enviado: o código de confirmação e o de login aparecem no terminal, o que serve para testar no computador.
-
-## Variáveis de ambiente
-
-Ficam no arquivo `.env` (modelo em `.env.example`). Esse arquivo nunca vai para o GitHub.
-
-| Variável | Para que serve |
-|---|---|
-| `DATABASE_URL` | Conexão com o PostgreSQL (Aiven) |
-| `JWT_SECRET` | Chave que assina os tokens de login (pelo menos 32 caracteres) |
-| `SMTP_USER` e `SMTP_PASS` | Envio de emails pelo Gmail do projeto (senha de app do Google). Sem eles, o email aparece só no terminal |
-| `ADMIN_EMAILS` | Emails (separados por vírgula) das contas que são administradoras |
-| `PORT`, `CORS_ORIGIN`, `APP_URL`, `JWT_EXPIRES_IN` | Opcionais |
+| 97 rotas | 28 tabelas | 17 migrations | 462 testes |
+|:---:|:---:|:---:|:---:|
+| documentadas no Swagger | no PostgreSQL | versionadas no Git | sem precisar de banco |
 
 ## Arquitetura
 
-Arquitetura em camadas, que divide as responsabilidades como o MVC (as "views" são o site e o app, que recebem JSON):
+Todo pedido percorre as mesmas camadas, cada uma com uma responsabilidade:
 
+```mermaid
+flowchart LR
+    R["routes/<br/>endereço + Swagger"] --> M["middlewares/<br/>login, idade,<br/>limite de tentativas"]
+    M --> C["controllers/<br/>valida com Zod"]
+    C --> S["services/<br/>regras do negócio"]
+    S --> P["Prisma"]
+    P --> DB[("PostgreSQL")]
 ```
-Pedido HTTP → routes/ → controllers/ → services/ → Prisma → PostgreSQL
-              endereço   valida (Zod)   regras de    acesso ao
-              + Swagger  e responde     negócio      banco
-```
 
-Erros esperados são lançados com `throw new AppError(mensagem, status, código)` e viram respostas JSON no `middlewares/errorHandler.ts`.
+Erros esperados (produto esgotado, código expirado, conta suspensa…) são lançados com `throw new AppError(mensagem, status, código)` e viram respostas JSON padronizadas no `middlewares/errorHandler.ts`.
 
-## Rotas (resumo)
+## Tecnologias
 
-A lista completa, com o que mandar e o que volta, está no Swagger em `/api/docs`.
+| Tecnologia | Para que usamos |
+|---|---|
+| **Node.js 22 + Express 5** | Servidor HTTP e as 97 rotas da API |
+| **TypeScript** | Tipos em todo o código, inclusive nos testes |
+| **Prisma 6** | Acesso ao banco e migrations, sem SQL escrito à mão |
+| **PostgreSQL (Aiven)** | Banco na nuvem, fora da AWS: recriar as máquinas não perde dados |
+| **Zod** | Validação de tudo que chega nas rotas |
+| **JWT + bcrypt** | Sessão de login e senhas guardadas só como hash |
+| **Nodemailer (Gmail)** | Códigos de confirmação, de login e links de nova senha |
+| **Swagger (OpenAPI)** | Documentação interativa em `/api/docs` |
+| **Vitest + Supertest** | Testes dos serviços e das rotas |
+
+## Rotas
+
+A lista completa, com o que mandar e o que volta, está no **Swagger em `/api/docs`**.
 
 | Área | Prefixo | Acesso |
 |---|---|---|
 | Status | `/health` | Público |
 | Cadastro e login | `/auth/register`, `/auth/verify-code`, `/auth/verify-email`, `/auth/login`, `/auth/login/verify`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/me` | Público (o `/me` exige login) |
-| Conta | `/users/me` (perfil, foto, senha, data de nascimento, exclusão) | Login |
-| Comunidade | `/posts`, `/comments`, `/profiles`, `/saved/posts` | Login |
-| Chat | `/friends`, `/chats` | Login (só entre amigos) |
-| Loja | `/products`, `/brands` (público), `/cart`, `/orders`, `/saved/products` | Login + 12 anos para comprar |
-| Spots e encontros | `/spots`, `/meetups` | Login + 12 anos |
-| Painel | `/admin/users`, `/admin/products`, `/admin/brands`, `/admin/orders`, `/admin/spots` | Só administrador |
+| Conta | `/users/me` (perfil, foto, senha, data de nascimento, aparelhos, exclusão) | Login |
+| Comunidade | `/posts`, `/comments`, `/profiles`, `/saved/posts`, `/blocks` | Login |
+| Chat | `/friends`, `/chats` | Login, só entre amigos |
+| Denúncias | `/reports` | Login |
+| Loja | `/products`, `/brands` (públicos), `/cart`, `/orders`, `/saved/products` | Login + 13 anos para comprar |
+| Spots e encontros | `/spots`, `/meetups` | Login + 13 anos |
+| Painel | `/admin/users`, `/admin/products`, `/admin/brands`, `/admin/orders`, `/admin/spots`, `/admin/reports` | Só administrador |
 
 ## Banco de dados
 
-25 tabelas em PostgreSQL, descritas em `prisma/schema.prisma`, com 14 migrations em `prisma/migrations/`. Todas se ligam à tabela `users`; excluir uma conta apaga em cascata os dados dela. Senhas e códigos ficam só como hash; fotos ficam no próprio banco.
+**28 tabelas** descritas em [`prisma/schema.prisma`](prisma/schema.prisma), criadas por **17 migrations** em `prisma/migrations/`. As principais relações:
 
-Para mudar o banco: edite o `schema.prisma`, gere a migration e aplique com `npm run db:deploy`.
+```mermaid
+erDiagram
+    USERS ||--o{ POSTS : publica
+    POSTS ||--o{ POST_IMAGES : tem
+    POSTS ||--o{ COMMENTS : recebe
+    POSTS ||--o{ LIKES : recebe
+    USERS ||--o{ FOLLOWS : segue
+    USERS ||--o{ CONVERSATIONS : participa
+    CONVERSATIONS ||--o{ MESSAGES : guarda
+    BRANDS ||--o{ PRODUCTS : vende
+    PRODUCTS ||--o{ PRODUCT_VARIANTS : "tamanhos e estoque"
+    USERS ||--o{ ORDERS : faz
+    ORDERS ||--o{ ORDER_ITEMS : contém
+    USERS ||--o{ SPOTS : sugere
+    SPOTS ||--o{ MEETUPS : recebe
+    MEETUPS ||--o{ MEETUP_PARTICIPANTS : confirma
+```
 
-## Scripts
+| Área | Tabelas |
+|---|---|
+| Contas | `users`, `user_avatars`, `email_verification_tokens`, `login_codes`, `trusted_devices`, `password_reset_tokens` |
+| Comunidade | `posts`, `post_images`, `comments`, `likes`, `follows`, `saved_posts`, `blocks` |
+| Chat e moderação | `conversations`, `messages`, `reports` |
+| Loja | `brands`, `products`, `product_variants`, `product_images`, `cart_items`, `orders`, `order_items`, `saved_products` |
+| Spots | `spots`, `spot_images`, `meetups`, `meetup_participants` |
+
+Decisões: as fotos ficam no próprio banco (JPEG de até 600 KB); senhas, códigos e tokens ficam só como hash; excluir uma conta apaga em cascata os dados dela; o pedido guarda uma cópia do produto e do preço, então mudar o produto não altera pedidos antigos.
+
+## Regras de negócio (destaques)
+
+- **Idade mínima de 13 anos** em todo o site, conferida na API (`requireMinAge`).
+- **Login em duas etapas:** senha + código de 6 dígitos por email (10 min, 5 tentativas, uso único), com opção de lembrar o aparelho por 30 dias.
+- **Chat só entre amigos** (as duas pessoas se seguem).
+- **Spots sugeridos passam pelo admin** (pendente → aprovado ou recusado); encontros só em spots aprovados, nos próximos 90 dias, com limite de 2 a 50 pessoas.
+- **Compra “tudo ou nada”:** o estoque de todos os itens é baixado numa transação; se faltar um, nada é gravado.
+- **Pedido:** pago → enviado → entregue; pago ou enviado pode ser cancelado, devolvendo o estoque. O pagamento é simulado.
+
+## Segurança
+
+| Proteção | Como funciona |
+|---|---|
+| Senhas | bcrypt; códigos e links de email guardados só como hash |
+| Sessão | Token JWT conferido no banco a cada pedido: conta excluída ou suspensa perde o acesso na hora, e trocar a senha encerra os outros logins |
+| Limite de tentativas | Por IP e por conta: login, cadastro, emails, posts, comentários, mensagens, spots e denúncias |
+| Privacidade | O email de uma pessoa nunca aparece para as outras, nem no painel do admin |
+| Moderação | Denunciar, bloquear e suspender contas, com fila no painel |
+| Segredos | Senhas e chaves só no `.env`, que nunca vai para o GitHub |
+
+## Como rodar
+
+```bash
+npm install
+cp .env.example .env      # preencha a DATABASE_URL e o JWT_SECRET
+npm run db:deploy         # cria as tabelas no banco (aplica as migrations)
+npm run dev               # sobe a API e recarrega ao salvar
+```
+
+| Endereço | O que é |
+|---|---|
+| http://localhost:3000/api | API |
+| http://localhost:3000/api/docs | Documentação (Swagger) |
+| http://localhost:3000/api/health | Status da API e do banco |
+
+Sem `SMTP_USER` e `SMTP_PASS`, nenhum email é enviado: os códigos aparecem no terminal, o que serve para testar no computador.
+
+<details>
+<summary><b>Variáveis de ambiente</b></summary>
+
+Ficam no arquivo `.env` (modelo em `.env.example`).
+
+| Variável | Para que serve |
+|---|---|
+| `DATABASE_URL` | Conexão com o PostgreSQL |
+| `JWT_SECRET` | Chave que assina os tokens de login (pelo menos 32 caracteres) |
+| `SMTP_USER` e `SMTP_PASS` | Envio de emails pelo Gmail do projeto (senha de app do Google) |
+| `ADMIN_EMAILS` | Emails, separados por vírgula, das contas administradoras |
+| `PORT`, `CORS_ORIGIN`, `APP_URL`, `JWT_EXPIRES_IN` | Opcionais |
+
+</details>
+
+<details>
+<summary><b>Scripts</b></summary>
 
 | Script | O que faz |
 |---|---|
@@ -82,11 +177,14 @@ Para mudar o banco: edite o `schema.prisma`, gere a migration e aplique com `npm
 | `npm start` | Compila o TypeScript e sobe a versão de produção (usado pelo PM2 na AWS) |
 | `npm run db:migrate` | Cria uma migration a partir do `schema.prisma` e aplica no banco |
 | `npm run db:deploy` | Aplica as migrations existentes |
-| `npm run db:studio` | Abre o Prisma Studio para ver os dados do banco |
+| `npm run db:studio` | Abre o Prisma Studio para ver os dados |
 | `npm test` | Roda os testes automáticos |
 | `npm run typecheck:tests` | Confere os tipos dos arquivos de teste |
 
-## Estrutura
+</details>
+
+<details>
+<summary><b>Estrutura de pastas</b></summary>
 
 ```
 src/
@@ -108,14 +206,7 @@ prisma/
 └── migrations/    histórico das mudanças do banco
 ```
 
-## Segurança
-
-- Login em duas etapas: senha + código de 6 dígitos por email (vale 10 minutos, 5 tentativas, uso único).
-- Senhas com bcrypt; códigos e links de email guardados só como hash.
-- Token JWT conferido no banco a cada pedido: conta excluída ou suspensa perde o acesso na hora; trocar a senha encerra os outros logins.
-- Limite de tentativas por IP e por conta (login, cadastro, emails, posts, mensagens, spots).
-- Idade mínima de 12 anos para spots, encontros e loja (`requireMinAge`).
-- O email de uma pessoa nunca aparece para as outras.
+</details>
 
 ## Testes
 
@@ -123,19 +214,26 @@ prisma/
 npm test
 ```
 
-**415 testes** em 17 arquivos, todos passando. Ficam ao lado de cada arquivo (`*.test.ts`) e usam o [Vitest](https://vitest.dev). Não precisam de banco nem de internet: o Prisma e o envio de email são substituídos por versões simuladas (`src/test/prismaMock.ts`).
+**462 testes em 18 arquivos**, todos passando. Não precisam de banco nem de internet: o Prisma e o envio de email são substituídos por versões simuladas (`src/test/prismaMock.ts`).
 
-| Arquivo | O que testa |
+| Arquivos | O que testam |
 |---|---|
-| `services/auth.service.test.ts` | cadastro, @username único, confirmação de email, login com código, nova senha |
-| `services/account.service.test.ts`, `admin.service.test.ts` | configurações da conta e painel do administrador |
-| `services/community.service.test.ts`, `chat.service.test.ts` | feed, posts, comentários, seguir e chat só entre amigos |
-| `services/market.service.test.ts` | catálogo, carrinho, fechamento de pedido (estoque) e situação dos pedidos |
-| `services/spot.service.test.ts` | spots com aprovação, encontros, limite de pessoas, desmarcar presença e cancelamento |
-| `middlewares/*.test.ts` | login por token, administrador, idade mínima, limite de tentativas e respostas de erro |
-| `routes/*.test.ts` | as rotas pelo lado de fora: validação, códigos de resposta e proteções |
-| `utils/age.test.ts`, `emails/emails.test.ts` | cálculo da idade e conteúdo dos emails |
+| `services/auth.service.test.ts` | Cadastro, @username único, confirmação de email, login com código, aparelhos confiáveis, nova senha |
+| `services/account.service.test.ts`, `admin.service.test.ts` | Configurações da conta e painel do administrador |
+| `services/community.service.test.ts`, `chat.service.test.ts` | Feed, posts, edição, comentários, seguir e chat só entre amigos |
+| `services/moderation.service.test.ts` | Denúncias, bloqueios e suspensão |
+| `services/market.service.test.ts` | Catálogo, carrinho, fechamento do pedido (estoque) e situação dos pedidos |
+| `services/spot.service.test.ts` | Spots com aprovação, encontros, limite de pessoas e cancelamento |
+| `middlewares/*.test.ts` | Token, administrador, idade mínima, limite de tentativas e respostas de erro |
+| `routes/*.test.ts` | As rotas por fora: validação, códigos de resposta e proteções |
+| `utils/age.test.ts`, `emails/emails.test.ts` | Cálculo da idade e conteúdo dos emails |
 
 ## Publicação (deploy)
 
-A API roda na AWS, numa máquina criada pelo [Terraform](https://github.com/AndreCamacho-byte/Terraform_TCC_WEB_REACT). Ao ser criada, a máquina baixa este repositório, roda `npm install`, `prisma migrate deploy` e sobe a API com o PM2 (`npm start`). O Nginx da máquina do site repassa para ela tudo o que começa com `/api`.
+A API roda na AWS, numa máquina criada com Terraform. Ao ser criada, a máquina baixa este repositório, roda `npm install` e `prisma migrate deploy` e sobe a API com o PM2, que a religa se ela cair. Só a máquina do site consegue falar com a API (porta 3000 liberada apenas para ela), e o Nginx de lá repassa tudo o que começa com `/api`.
+
+---
+
+<div align="center">
+<sub><b>clutch.</b> — for those who shred</sub>
+</div>

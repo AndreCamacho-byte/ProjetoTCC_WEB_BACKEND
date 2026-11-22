@@ -96,6 +96,18 @@ describe("errorHandler", () => {
     expect(handle(error).statusCode).toBe(500);
   });
 
+  it("responde 400 quando o corpo não é um JSON válido", () => {
+    const res = handle(Object.assign(new SyntaxError("Unexpected token"), { type: "entity.parse.failed" }));
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "O corpo da requisição não é um JSON válido" });
+  });
+
+  it("responde 413 quando o corpo passa do limite", () => {
+    const res = handle(Object.assign(new Error("request entity too large"), { type: "entity.too.large" }));
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toEqual({ error: "O envio é grande demais" });
+  });
+
   it("responde 500 sem revelar detalhes de erros inesperados", () => {
     const res = handle(new Error("senha do banco: 123"));
     expect(res.statusCode).toBe(500);

@@ -22,6 +22,17 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
+  // Erros do express.json(): quem enviou errado recebe 400 ou 413, e não "erro interno"
+  const bodyErrorType = (err as { type?: unknown } | null)?.type;
+  if (bodyErrorType === "entity.parse.failed") {
+    res.status(400).json({ error: "O corpo da requisição não é um JSON válido" });
+    return;
+  }
+  if (bodyErrorType === "entity.too.large") {
+    res.status(413).json({ error: "O envio é grande demais" });
+    return;
+  }
+
   // Banco fora de alcance, conexão caiu no meio ou a fila de conexões estourou (P2024):
   // são falhas passageiras, então a resposta é 503 e não "erro interno"
   const databaseUnavailable =

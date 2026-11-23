@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { AppError } from "../errors/AppError";
 import { z } from "zod";
 import * as community from "../services/community.service";
 import * as profiles from "../services/profile.service";
@@ -9,7 +10,8 @@ export const MAX_POST_LENGTH = 500;
 export const MAX_COMMENT_LENGTH = 300;
 
 // Quem está pedindo (o requireAuth já carregou a conta)
-const viewerOf = (req: Request): community.Viewer => ({ id: req.userId!, isAdmin: req.authUser?.role === "ADMIN" });
+// Visitante (sem login) tem id vazio: não tem curtidas nem salvos, e nada aparece como dele
+const viewerOf = (req: Request): community.Viewer => ({ id: req.userId ?? "", isAdmin: req.authUser?.role === "ADMIN" });
 
 const idParam = (name: string) => z.object({ [name]: z.uuid("Id inválido") });
 const usernameParam = z.object({ username: z.string().trim().toLowerCase().min(1).max(30) });
@@ -50,7 +52,11 @@ const commentSchema = z.object({
 // ---------- Posts ----------
 
 export async function getFeed(req: Request, res: Response) {
-  res.json(await community.getFeed(viewerOf(req), feedQuery.parse(req.query)));
+  const query = feedQuery.parse(req.query);
+  if (query.feed === "following" && !req.userId) {
+    throw new AppError("Entre na sua conta para ver quem você segue", 401);
+  }
+  res.json(await community.getFeed(viewerOf(req), query));
 }
 
 export async function getPost(req: Request, res: Response) {

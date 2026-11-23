@@ -40,13 +40,10 @@ beforeEach(() => {
 
 describe("comunidade exige login", () => {
   const routes = [
-    ["get", "/api/posts"],
     ["post", "/api/posts"],
-    ["get", `/api/posts/${POST_ID}`],
     ["delete", `/api/posts/${POST_ID}`],
     ["patch", `/api/posts/${POST_ID}`],
     ["put", `/api/posts/${POST_ID}/like`],
-    ["get", `/api/posts/${POST_ID}/comments`],
     ["post", `/api/posts/${POST_ID}/comments`],
     ["get", "/api/profiles?search=tony"],
     ["get", "/api/profiles/tony"],
@@ -77,6 +74,25 @@ describe("comunidade exige login", () => {
     prisma.post.findMany.mockResolvedValue([]);
 
     expect((await request(app).get("/api/posts").set(bearer)).status).toBe(200);
+  });
+});
+
+describe("comunidade aberta a visitantes", () => {
+  it("mostra o feed sem login, sem nada marcado como do visitante", async () => {
+    prisma.block.findMany.mockResolvedValue([]);
+    prisma.post.findMany.mockResolvedValue([createdPost]);
+    const res = await request(app).get("/api/posts");
+    expect(res.status).toBe(200);
+    expect(res.body.posts[0]).toMatchObject({ likedByMe: false, savedByMe: false, canEdit: false, canDelete: false, isMine: false });
+    expect(res.body.posts[0].author).not.toHaveProperty("email");
+  });
+
+  it("não mostra o feed Seguindo sem login", async () => {
+    expect((await request(app).get("/api/posts?feed=following")).status).toBe(401);
+  });
+
+  it("recusa um token inválido em vez de tratar como visitante", async () => {
+    expect((await request(app).get("/api/posts").set("Authorization", "Bearer lixo")).status).toBe(401);
   });
 });
 

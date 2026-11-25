@@ -59,6 +59,16 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
   next();
 };
 
+// Para rotas abertas a visitantes: sem token a pessoa segue como visitante (req.userId vazio).
+// Com token, vale a mesma conferência do requireAuth, para o site saber o que é dela.
+export const optionalAuth: RequestHandler = async (req, res, next) => {
+  if (!req.headers.authorization) {
+    next();
+    return;
+  }
+  await requireAuth(req, res, next);
+};
+
 // Protege rotas exclusivas de administradores. Use sempre depois do requireAuth.
 // A função vem do banco (carregada pelo requireAuth nesta mesma requisição), então tirar
 // o acesso de alguém vale na hora.

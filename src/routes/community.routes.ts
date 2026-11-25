@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as community from "../controllers/community.controller";
-import { requireAuth } from "../middlewares/auth";
+import { optionalAuth, requireAuth } from "../middlewares/auth";
 import { limits } from "../middlewares/rateLimit";
 
 // Comunidade: feed, posts, curtidas, comentários e perfis.
@@ -103,8 +103,6 @@ communityRoutes.get("/posts/images/:imageId", community.getPostImage);
  *     tags: [Posts]
  *     summary: Feed da comunidade (mais recentes primeiro)
  *     description: Posts de contas suspensas não aparecem.
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: feed
@@ -168,7 +166,7 @@ communityRoutes.get("/posts/images/:imageId", community.getPostImage);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-communityRoutes.get("/posts", requireAuth, community.getFeed);
+communityRoutes.get("/posts", optionalAuth, community.getFeed);
 communityRoutes.post("/posts", requireAuth, limits.posting, community.createPost);
 
 /**
@@ -177,8 +175,6 @@ communityRoutes.post("/posts", requireAuth, limits.posting, community.createPost
  *   get:
  *     tags: [Posts]
  *     summary: Um post
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -253,7 +249,7 @@ communityRoutes.post("/posts", requireAuth, limits.posting, community.createPost
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-communityRoutes.get("/posts/:id", requireAuth, community.getPost);
+communityRoutes.get("/posts/:id", optionalAuth, community.getPost);
 communityRoutes.patch("/posts/:id", requireAuth, limits.posting, community.updatePost);
 communityRoutes.delete("/posts/:id", requireAuth, community.deletePost);
 
@@ -374,8 +370,6 @@ communityRoutes.get("/saved/posts", requireAuth, community.listSavedPosts);
  *   get:
  *     tags: [Posts]
  *     summary: Comentários de um post (mais antigos primeiro)
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -426,7 +420,7 @@ communityRoutes.get("/saved/posts", requireAuth, community.listSavedPosts);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Comment' }
  */
-communityRoutes.get("/posts/:id/comments", requireAuth, community.listComments);
+communityRoutes.get("/posts/:id/comments", optionalAuth, community.listComments);
 communityRoutes.post("/posts/:id/comments", requireAuth, limits.commenting, community.createComment);
 
 /**
